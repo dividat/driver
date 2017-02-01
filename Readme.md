@@ -73,12 +73,31 @@ To slow down the replay: `npm run replay -- -t 100`
 
 ## Starting a local DHCP server
 
-For demonstrations the Senso is directly connected to the computer running the driver software (The Mac Mini with hostname `macademia`). A small dhcp server needs to be running.
+The Senso can be directly connected via Ethernet to a computer running the driver software. In this case, in addition to the driver a DHCP server needs to be running on the computer.
 
-- Install `dnsmasq` (on Mac: `brew install dnsmasq`)
-- Make sure network is set to Manual configuration and the machine you are running this from has IP 192.168.1.1
-- Check `etc/dnsmasq.conf`
-- Run `bin/dhcp-server.sh`
+### Mac OS X
+
+These instructions are valid for any Mac system, but are relevant especially for the demo Mac Mini (hostname `macademia`).
+
+- Install dnsmasq: `brew install dnsmasq`
+- Make sure the Ethernet adapter is set to manual configuration with a static IP. A link-local address is a good choice, `169.254.1.1`.
+- Create or update `/usr/local/etc/dnsmasq.conf` to set a static IP for Sensos plugged into the computer:
+
+  ```
+  # Enable the DHCP server, setting IP range and lease time.
+  dhcp-range=169.254.1.2,169.254.1.100,12h
+
+  ## Static hosts
+
+  # Senso Prototype
+  dhcp-host=<MAC-ADDRESS>,169.254.1.10
+  ```
+  
+  where `<MAC-ADDRESS>` is a MAC address with or without wildcards (`*`). `00:50:c2:3d:*:*` works for all Sensos using BDT's address space.
+- Start dnsmasq as a service: `brew services start dnsmasq`
+- Now (re-)plug in the Senso
+
+Following these instructions, the Senso should have IP `169.254.1.10`.
 
 ## Contact
 
