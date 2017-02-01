@@ -11,7 +11,7 @@ const data = require('./senso/data');
 
 const DATA_PORT = 55568;
 const CONTROL_PORT = 55567;
-const DEFAULT_SENSO_ADDRESS = '192.168.1.10';
+const DEFAULT_SENSO_ADDRESS = '169.254.1.10';
 
 const log = require('electron-log');
 
