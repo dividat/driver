@@ -31,7 +31,6 @@ module.exports = function Connection (host, port, name, log) {
 
   function onError (err) {
     log.warn(formatLog('Error: ' + err.message))
-    connection.emit('error', err)
   }
 
   function onData (data) {
@@ -44,9 +43,8 @@ module.exports = function Connection (host, port, name, log) {
         log.verbose(formatLog('Timeout while connecting.'))
         connection.connect()
       } else {
-                // log.verbose(formatLog("Sending keepalive."));
-                // var heartBeat = new Buffer(0);
-                // connection.socket.write(heartBeat);
+        // emit a 'timeout' event. This means application logic should do a application level liveliness check
+        connection.emit('timeout')
       }
     }
   }

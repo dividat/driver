@@ -29,8 +29,11 @@ try {
 
 const discovery = require('./Senso/discovery')(log)
 
-function factory (sensoAddress, recorder) {
+module.exports = (sensoAddress, recorder) => {
   sensoAddress = sensoAddress || config.get(constants.SENSO_ADDRESS_KEY) || DEFAULT_SENSO_ADDRESS
+
+  // Application level timeout
+  let timeout
 
   var dataConnection = new Connection(sensoAddress, DATA_PORT, 'DATA', log)
   var controlConnection = new Connection(sensoAddress, CONTROL_PORT, 'CONTROL', log)
@@ -43,11 +46,41 @@ function factory (sensoAddress, recorder) {
     })
   }
 
-  dataConnection.on('error', (err) => {
-    // console.error('Data connection error: ', err)
+  // Monitor data from control connection and keep track of Senso state
+  controlConnection.on('data', (raw) => {
+    // cancel the timeout
+    if (timeout) {
+      log.debug('TIMEOUT: Senso alive! Canceling timeout.')
+      clearTimeout(timeout)
+      timeout = null
+    }
+
+    try {
+      const response = decodeResponse(raw)
+      if (response.error) {
+        log.warn('CONTROL: Senso responded with error to a command.')
+        log.warn(response)
+      } else if (response.status & 0x80000000) {
+        log.error('CONTROL: Senso is reporting that an error occured!')
+        log.error(response)
+      } else {
+        log.debug('CONTROL: Monitored Senso status: All good.')
+      }
+    } catch (e) {
+      log.error('CONTROL: Failed to decode response while monitoring Senso status.')
+    }
   })
-  controlConnection.on('error', (err) => {
-    // console.error(('Control connection error:, ', err))
+
+  controlConnection.on('timeout', () => {
+    log.debug('TIMEOUT: Checking liveliness by getting Senso status.')
+    controlConnection.getSocket().write(GET_STATUS_PACKET)
+
+    // start the application level timeout
+    timeout = setTimeout(() => {
+      log.warn('TIMEOUT: Connection to Senso seems to have been broken (no response in 2s). Attempting to reconnect...')
+      controlConnection.connect()
+      dataConnection.connect()
+    }, 2000)
   })
 
   // connect with predifined default
@@ -114,11 +147,11 @@ function factory (sensoAddress, recorder) {
     ws.on('SendControlRaw', (data) => {
       try {
         var socket = controlConnection.getSocket()
-        log.debug('CONTROL: ', data)
+        log.debug('CONTROL - sending: ', data)
         if (socket) {
           socket.write(data)
         } else {
-          log.console.warn('Can not send command to Senso, no connection.')
+          log.warn('Can not send command to Senso, no connection.')
         }
       } catch (e) {
         log.error('Error while handling Command:', e)
@@ -142,7 +175,7 @@ function factory (sensoAddress, recorder) {
             break
         }
       } catch (e) {
-        console.error('Error while handling BridgeCommand:', e)
+        log.error('Error while handling BridgeCommand:', e)
       }
     })
 
@@ -163,4 +196,45 @@ function factory (sensoAddress, recorder) {
   return onPlayConnection
 }
 
-module.exports = factory
+const GET_STATUS_PACKET = (() => {
+  // all 0 header
+  const header = Buffer.alloc(8)
+
+  // Build the block to be sent
+  const block = new ArrayBuffer(4)
+  const dataView = new DataView(block)
+  // size
+  dataView.setUint16(0, 1, true)
+  // Block type
+  dataView.setUint16(2, 0x00D0, true)
+
+  return Buffer.concat([header, new Buffer(block)])
+})()
+
+// Decoding of net response (STD_RESPONSE)
+function decodeResponse (raw) {
+    // Convert to ArrayBuffer
+  const ab = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)
+
+    // Header
+  const headerView = new DataView(ab.slice(0, 8))
+  let header = {}
+  header.version = headerView.getUint8(0)
+  header.numOfBlocks = headerView.getUint8(1)
+
+    // STD_RESPONSE
+  const responseView = new DataView(ab.slice(8))
+  let response = {}
+  response.header = header
+  response.len = responseView.getUint16(0, true)
+    // blocktype is masked to indicate a response (DATA_TYPE_RESPONSE). Split that out here.
+  const blockTypeRaw = responseView.getUint16(2, true)
+  response.isResponse = !!(blockTypeRaw & 0x8000)
+  response.blockType = blockTypeRaw & 0x0fff
+
+  response.returnCode = responseView.getUint32(4)
+  response.status = responseView.getUint32(8)
+  response.error = responseView.getUint32(12)
+
+  return response
+}
