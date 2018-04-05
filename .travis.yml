@@ -1,2 +1,10 @@
 language: nix
-script: nix-shell --command "go version && make test"
+script:
+  # Remove default channel
+  - nix-channel --remove nixpkgs
+  # Add stable 17.09 channel
+  - nix-channel --add https://nixos.org/channels/nixos-17.09 nixpkgs
+  # Update expressions from channel
+  - nix-channel --update
+  # Run tests
+  - nix-shell --command "go version && make test"
