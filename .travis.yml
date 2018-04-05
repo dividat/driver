@@ -1,2 +1,3 @@
 language: nix
-script: nix-shell --command "go version && make test"
+script: nix-channel --list 
+#&& nix-shell --command "go version && make test"
