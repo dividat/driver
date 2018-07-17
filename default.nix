@@ -29,11 +29,6 @@ buildGoPackage rec {
         (import ./nix/osslsigncode {inherit stdenv fetchurl openssl curl autoconf;})
         # for deployment to S3
         awscli
-
-        autoconf automake libtool flex
-
-        pkgconfig
-
       ]
       # PCSC on Darwin
       ++ lib.optional stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.PCSC
