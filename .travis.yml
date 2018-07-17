@@ -1,4 +1,6 @@
 language: nix
 script:
+  # Cross compile
+  - nix-shell --command "make crossbuild"
   # Run tests
   - nix-shell --command "make test"
