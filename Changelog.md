@@ -2,7 +2,13 @@
 
 ## [UNRELEASED]
 
+### Changed
+
 - Improvements to build system, in particular the crossbuild system for building releases.
+
+### Added
+
+- Support for Windows platform
 
 ## [2.0.0] - 2018-04-09
 

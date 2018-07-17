@@ -58,8 +58,12 @@ LINUX_BIN = bin/dividat-driver-linux-amd64
 $(LINUX_BIN):
 	nix-shell nix/build/linux.nix --command "$(MAKE) OUT=$(LINUX_BIN) STATIC_BUILD=1 GOCROSS_OPTS=\"GOOS=linux GOARCH=amd64\""
 
-crossbuild: $(LINUX_BIN)
+WINDOWS_BIN = bin/dividat-driver-windows-amd64.exe
+.PHONY: $(WINDOWS_BIN)
+$(WINDOWS_BIN):
+	nix-shell nix/build/windows.nix --command "$(MAKE) OUT=$(WINDOWS_BIN) STATIC_BUILD=1 GOCROSS_OPTS=\"GOOS=windows GOARCH=amd64\""
 
+crossbuild: $(LINUX_BIN) $(WINDOWS_BIN)
 
 ### Release ###############################################
 
@@ -93,22 +97,22 @@ $(LINUX_RELEASE): $(LINUX_BIN)
 	#upx $(DARWIN_RELEASE)
 	#$ (call write-signature,$(DARWIN_RELEASE))
 
-#WINDOWS_RELEASE = $(RELEASE_DIR)/$(notdir $(WINDOWS_BIN))-$(VERSION).exe
-#$(WINDOWS_RELEASE): $(WINDOWS_BIN)
-	#cp bin/$(WINDOWS).exe $(WINDOWS_RELEASE)
-	#upx $(WINDOWS_RELEASE)
-	#\$ (call write-signature,$(WINDOWS_RELEASE))
-	#osslsigncode sign \
-		#-pkcs12 $(CODE_SIGNING_CERT) \
-		#-h sha1 \
-		#-n "Dividat Driver" \
-		#-i "https://www.dividat.com/" \
-		#-in $(WINDOWS_RELEASE) \
-		#-out $(WINDOWS_RELEASE)
+WINDOWS_RELEASE = $(RELEASE_DIR)/dividat-driver-windows-amd64-$(VERSION).exe
+$(WINDOWS_RELEASE): $(WINDOWS_BIN)
+	cp $(WINDOWS_BIN) $(WINDOWS_RELEASE)
+	upx $(WINDOWS_BIN)
+	osslsigncode sign \
+		-pkcs12 $(CODE_SIGNING_CERT) \
+		-h sha1 \
+		-n "Dividat Driver" \
+		-i "https://www.dividat.com/" \
+		-in $(WINDOWS_BIN) \
+		-out $(WINDOWS_RELEASE)
+	$(call write-signature,$(WINDOWS_RELEASE))
 
 # sign and copy binaries to release folders
 .PHONY: release
-release: $(LINUX_RELEASE) release/$(CHANNEL)/latest
+release: $(LINUX_RELEASE) $(WINDOWS_RELEASE) release/$(CHANNEL)/latest
 
 
 ### Deploy ################################################

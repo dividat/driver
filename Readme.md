@@ -40,7 +40,7 @@ New Go dependencies can be added with `dep` (e.g. `dep ensure -add github.com/so
 
 #### Building
 
-**Currently releases can only be made for Linux (from Linux).**
+**Currently releases can only be made from Linux.**
 
 To create a release run: `make release`.
 
@@ -51,6 +51,7 @@ Releases are built towards a more clearly specified target system (also statical
 Existing release targets:
 
 - Linux: statically linked with [musl](https://www.musl-libc.org/)
+- Windows
 
 ### Deploying
 
