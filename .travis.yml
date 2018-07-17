@@ -1,4 +1,7 @@
 language: nix
+cache:
+  directories:
+    - /nix
 script:
   # Cross compile
   - nix-shell --command "make crossbuild"
