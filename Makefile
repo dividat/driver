@@ -46,7 +46,6 @@ build:
 ### Test suite ############################################
 .PHONY: test
 test: build
-	npm install
 	npm test
 
 
@@ -158,6 +157,15 @@ deploy: release
 ### Dependencies and cleanup ##############################
 nix/deps.nix: src/dividat-driver/Gopkg.toml
 	dep2nix -i src/dividat-driver/Gopkg.lock -o nix/deps.nix
+
+.PHONY: node-dependencies
+node-dependencies: package.json
+	cp package.json nix/node/dummy/package.json
+	node2nix -8 \
+		--development \
+		--composition nix/node/default.nix \
+    --node-env nix/node/env.nix \
+    --output nix/node/packages.nix
 
 clean:
 	rm -rf release/

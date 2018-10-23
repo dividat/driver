@@ -36,6 +36,14 @@ For local development you may use `dep` to install go dependencies: `cd src/divi
 
 New Go dependencies can be added with `dep` (e.g. `dep ensure -add github.com/something/supercool`). The Nix specification of dependencies will recreated on subsequent builds (i.e. running `make`). Check in the updated `Gopkg.toml`, `Gopkg.lock` and `nix/deps.nix` files.
 
+### Node dependencies
+
+Node dependencies are fetched and made available by Nix (using [`node2nix`](https://github.com/svanderburg/node2nix)).
+
+You do not need to run `npm install`!
+
+To add new packages use the usual `npm` commands and run `make node-dependencies`. This will rebuild the Nix declarations for setting up node dependencies.
+
 ### Releasing
 
 #### Building

@@ -1,5 +1,12 @@
 with (import ./nix/nixpkgs.nix) {};
 
+let
+  nodeDependencies = ((import ./nix/node {
+    inherit pkgs;
+    nodejs = nodejs-8_x;
+  }).shell.override { src = ./nix/node/dummy; }).nodeDependencies;
+in
+
 buildGoPackage rec {
     name = "dividat-driver";
     goPackagePath = "dividat-driver";
@@ -19,8 +26,11 @@ buildGoPackage rec {
 
         nix-prefetch-git
         (import ./nix/deps2nix {inherit stdenv fetchFromGitHub buildGoPackage;})
+
         # node for tests
         nodejs-8_x
+        nodeDependencies
+				nodePackages.node2nix
 
         # for building releases
         openssl upx
