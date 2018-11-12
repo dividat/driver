@@ -5,15 +5,28 @@ let
     inherit pkgs;
     nodejs = nodejs-8_x;
   }).shell.override { src = ./nix/node/dummy; }).nodeDependencies;
+
+  goPackagePath = "dividat-driver";
+
+  goPath = import ./nix/make-gopath.nix {
+    inherit pkgs lib;
+    depsFile = ./nix/deps.nix;
+  };
+
+  crossbuild = import ./crossbuild.nix { inherit pkgs goPath goPackagePath; };
+
 in
 
-buildGoPackage rec {
+stdenv.mkDerivation {
     name = "dividat-driver";
     goPackagePath = "dividat-driver";
 
     src = ./src/dividat-driver;
 
-    goDeps = ./nix/deps.nix;
+    shellHook = ''
+      echo ${crossbuild.windows}
+      echo ${crossbuild.linux}
+    '';
 
     buildInputs =
     [ 
@@ -42,6 +55,8 @@ buildGoPackage rec {
 
         # Required for building go dependencies
         autoconf automake libtool flex pkgconfig
+
+        pcsclite
       ]
       # PCSC on Darwin
       ++ lib.optional stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.PCSC
