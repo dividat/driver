@@ -1,32 +1,58 @@
 with (import ./nix/nixpkgs.nix) {};
 
 let
+
+  version = "2.2.0-dev";
+  channel = "develop";
+  releaseUrl = "https://dist.dividat.com/releases/driver2/";
+
+  gitignore = import ./nix/gitignore.nix { inherit fetchFromGitHub lib; };
+
+  src = gitignore.gitignoreSource ./.;
+
   nodeDependencies = ((import ./nix/node {
     inherit pkgs;
     nodejs = nodejs-8_x;
   }).shell.override { src = ./nix/node/dummy; }).nodeDependencies;
-
-  goPackagePath = "dividat-driver";
 
   goPath = import ./nix/make-gopath.nix {
     inherit pkgs lib;
     depsFile = ./nix/deps.nix;
   };
 
-  crossbuild = import ./crossbuild.nix { inherit pkgs goPath goPackagePath; };
+  crossbuild = import ./crossbuild.nix { inherit pkgs src version channel releaseUrl goPath; };
 
 in
 
-stdenv.mkDerivation {
-    name = "dividat-driver";
-    goPackagePath = "dividat-driver";
+stdenv.mkDerivation rec {
+    name = "dividat-driver-${version}";
 
-    src = ./src/dividat-driver;
+    inherit src;
 
-    shellHook = ''
-      echo ${crossbuild.windows}
-      echo ${crossbuild.linux}
+    # Enable test suite
+    doCheck = true;
+    checkTarget = "test";
+
+    configurePhase = ''
+      export GOPATH=${goPath}:`pwd`
+      export VERSION=${version}
+      export CHANNEL=${channel}
+      export RELEASE_URL=${releaseUrl}
     '';
+
+    installPhase = ''
+      # Create the unsigned files for release
+      mkdir -p $out/release-unsigned/${channel}/${version}
+      cp ${crossbuild.linux}/bin/* $out/release-unsigned/${channel}/${version}
+      cp ${crossbuild.windows}/bin/* $out/release-unsigned/${channel}/${version}
+      echo ${version} > $out/release-unsigned/${channel}/latest
+
+      # Copy binary for local system
+      mkdir -p $out/bin
+      cp bin/dividat-driver $out/bin
+    '';
+
+    shellHook = configurePhase;
 
     buildInputs =
     [ 
@@ -34,8 +60,6 @@ stdenv.mkDerivation {
         dep
         # Git is a de facto dependency of dep
         git
-
-        gcc
 
         nix-prefetch-git
         (import ./nix/deps2nix {inherit stdenv fetchFromGitHub buildGoPackage;})
@@ -55,11 +79,9 @@ stdenv.mkDerivation {
 
         # Required for building go dependencies
         autoconf automake libtool flex pkgconfig
-
-        pcsclite
       ]
       # PCSC on Darwin
       ++ lib.optional stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.PCSC
-      ++ lib.optional stdenv.isLinux [ pcsclite ];
+      ++ lib.optional stdenv.isLinux pcsclite;
 
 }

@@ -3,7 +3,7 @@
 BUCKET = s3://dist.dividat.ch/releases/driver2
 
 # where the BUCKET folder is accessible for getting updates (needs to end with a slash)
-RELEASE_URL = https://dist.dividat.com/releases/driver2/
+RELEASE_URL ?= https://dist.dividat.com/releases/driver2/
 
 
 ### Basic setup ###########################################
@@ -14,17 +14,11 @@ GOPATH ?= $(CWD)
 # Main source to build
 SRC = ./src/dividat-driver/main.go
 
-# Default location where built binary will be placed
-OUT ?= bin/dividat-driver
-
 # Get version from git
-VERSION := $(shell git describe --always HEAD)
+VERSION ?= $(shell git describe --always HEAD)
 
 # set the channel name to the branch name
-CHANNEL := $(shell git rev-parse --abbrev-ref HEAD)
-
-CC ?= gcc
-CXX ?= g++
+CHANNEL ?= $(shell git rev-parse --abbrev-ref HEAD)
 
 # Enable static linking
 ifdef STATIC_BUILD
@@ -38,40 +32,28 @@ CHECKSUM_SIGNING_CERT ?= ./keys/checksumsign.private.pem
 
 
 ### Simple build ##########################################
-.PHONY: build
-build:
-	$(GOCROSS_OPTS) CC=$(CC) CXX=$(CXX) go build $(GO_LDFLAGS) -o $(OUT) $(SRC)
+.PHONY: bin/dividat-driver
+bin/dividat-driver:
+	mkdir -p bin
+	go build $(GO_LDFLAGS) -o $@ $(SRC)
 
 
 ### Test suite ############################################
 .PHONY: test
-test: build
+test: bin/dividat-driver
 	npm test
 
 
 ### Helper to quickly run the driver
 .PHONY: run
-run: build
-	$(OUT)
+run:
+	go run $(GO_LDFLAGS) $(SRC)
 
 ### Helper to start the recorder
 .PHONY: recorder
 recorder:
 	@go run src/dividat-driver/recorder/main.go
 
-
-### Cross compilation #####################################
-LINUX_BIN = bin/dividat-driver-linux-amd64
-.PHONY: $(LINUX_BIN)
-$(LINUX_BIN):
-	nix-shell nix/build/linux.nix --command "$(MAKE) OUT=$(LINUX_BIN) STATIC_BUILD=1 GOCROSS_OPTS=\"GOOS=linux GOARCH=amd64\""
-
-WINDOWS_BIN = bin/dividat-driver-windows-amd64.exe
-.PHONY: $(WINDOWS_BIN)
-$(WINDOWS_BIN):
-	nix-shell nix/build/windows.nix --command "$(MAKE) OUT=$(WINDOWS_BIN) STATIC_BUILD=1 GOCROSS_OPTS=\"GOOS=windows GOARCH=amd64\""
-
-crossbuild: $(LINUX_BIN) $(WINDOWS_BIN)
 
 ### Release ###############################################
 

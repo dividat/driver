@@ -1,4 +1,9 @@
-{ pkgs, goPath, goPackagePath }:
+{ pkgs
+, src
+, version
+, channel
+, releaseUrl
+, goPath }:
 let
   crossStdenv = system: 
   ((import ./nix/nixpkgs.nix) { 
@@ -10,27 +15,31 @@ let
     crossSystem = { config = system; }; 
   }).pkgs;
 
+  configurePhase = ''
+    export GOPATH=${goPath}:`pwd`
+    export STATIC_BUILD=1
+
+    export VERSION=${version}
+    export CHANNEL=${channel}
+    export RELEASE_URL=${releaseUrl}
+  '';
+
 in
   {
     linux = 
     (crossStdenv "x86_64-unknown-linux-musl").mkDerivation {
       name = "dividat-driver";
 
-      src = ./src;
+      inherit src;
 
-      configurePhase = ''
-        echo $CC
-        export GOPATH=${goPath}:"$NIX_BUILD_TOP"
-        export STATIC_BUILD=1
-      '';
-
-      buildPhase = ''
-        mkdir -p $out
-        go build -o $out/dividat-driver ${goPackagePath}
+      configurePhase = configurePhase + ''
+        export GOOS=linux
+        export GOARCH=amd64
       '';
 
       installPhase = ''
-        echo hello
+        mkdir -p $out/bin
+        cp bin/dividat-driver $out/bin/dividat-driver-linux-amd64
       '';
 
       nativeBuildInputs = with pkgs; [
@@ -51,20 +60,16 @@ in
     windows = (crossStdenv "x86_64-pc-mingw32").mkDerivation {
       name = "dividat-driver";
 
-      src = ./src;
+      inherit src;
 
-      configurePhase = ''
-        echo $CC
-        export GOPATH=${goPath}:"$NIX_BUILD_TOP"
-      '';
-
-      buildPhase = ''
-        mkdir -p $out
-        GOOS=windows GOARCH=amd64 go build -o $out/dividat-driver ${goPackagePath}
+      configurePhase = configurePhase + ''
+        export GOOS=windows
+        export GOARCH=amd64
       '';
 
       installPhase = ''
-        echo hello
+        mkdir -p $out/bin
+        cp bin/dividat-driver $out/bin/dividat-driver-windows-amd64.exe
       '';
 
       nativeBuildInputs = with pkgs; [

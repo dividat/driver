@@ -1,7 +1,7 @@
 node_modules/
 src/dividat-driver/vendor/
 
-release/
+result
 bin/
 pkg/
 src/cmd/dividat-driver/debug
