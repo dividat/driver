@@ -34,7 +34,7 @@ Go dependencies are provided by the [Go machinery](https://nixos.org/nixpkgs/man
 
 For local development you may use `dep` to install go dependencies: `cd src/dividat-driver && dep ensure`.
 
-New Go dependencies can be added with `dep` (e.g. `dep ensure -add github.com/something/supercool`). The Nix specification of dependencies will recreated on subsequent builds (i.e. running `make`). Check in the updated `Gopkg.toml`, `Gopkg.lock` and `nix/deps.nix` files.
+New Go dependencies can be added with `dep` (e.g. `dep ensure -add github.com/something/supercool`). Make sure you run `make nix/deps.nix` to update the Nix expression containing go dependencies.
 
 ### Node dependencies
 
@@ -44,26 +44,18 @@ You do not need to run `npm install`!
 
 To add new packages use the usual `npm` commands and run `make node-dependencies`. This will rebuild the Nix declarations for setting up node dependencies.
 
-### Releasing
+### Target systems
 
-#### Building
-
-**Currently releases can only be made from Linux.**
-
-To create a release run: `make release`.
-
-A default environment (defined in `default.nix`) provides all necessary dependencies for building on your native system (i.e. Linux or Darwin). Running `make` will create a binary that should run on your system (at least in the default environemnt).
-
-Releases are built towards a more clearly specified target system (also statically linked). The target systems are defined in the [`nix/build`](nix/build) folder. Nix provides toolchains and dependencies for the target system in a sub environment. The build system (in the `make crossbuild` target) invokes these sub environments to build releases.
-
-Existing release targets:
+Currently driver is built for following targets:
 
 - Linux: statically linked with [musl](https://www.musl-libc.org/)
 - Windows
 
-### Deploying
+### Releasing
 
-To deploy a new release run: `make deploy`. This can only be done if you are on `master` or `develop` branch, have correctly tagged the revision and have AWS credentials set in your environment.
+**Currently releases can only be made from Linux.**
+
+Running `nix build` will create all artifacts to be releaed, run test suite and will create a deployment script (`bin/deploy`). Run the deployment script to deploy a release.
 
 ## Installation
 
