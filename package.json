@@ -12,12 +12,12 @@
     "bonjour": "^3.5.0",
     "chai": "^4.1.1",
     "mocha": "^5.2.0",
-    "request": "^2.85.0",
-    "request-promise": "^4.2.1",
+    "request": "^2.88.0",
+    "request-promise": "^4.2.2",
     "ws": "^3.1.0"
   },
   "devDependencies": {
     "binary-split": "^1.0.3",
-    "nodemon": "^1.11.0"
+    "nodemon": "^1.18.6"
   }
 }
