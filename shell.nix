@@ -9,7 +9,7 @@ mkShell {
     nix-prefetch-git
 
     # node for tests
-    nodejs
+    nodejs-10_x
 
     # for building releases
     openssl upx
