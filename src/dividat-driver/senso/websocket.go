@@ -24,6 +24,7 @@ type Command struct {
 	*Disconnect
 
 	*Discover
+	*UpdateFirmware
 }
 
 func prettyPrintCommand(command Command) string {
@@ -53,6 +54,11 @@ type Disconnect struct{}
 // Discover command
 type Discover struct {
 	Duration int `json:"duration"`
+}
+
+type UpdateFirmware struct {
+	Address string `json:"address"`
+	Image   string `json:"image"`
 }
 
 // UnmarshalJSON implements encoding/json Unmarshaler interface
@@ -85,6 +91,11 @@ func (command *Command) UnmarshalJSON(data []byte) error {
 			return err
 		}
 
+	} else if temp.Type == "UpdateFirmware" {
+		err := json.Unmarshal(data, &command.UpdateFirmware)
+		if err != nil {
+			return err
+		}
 	} else {
 		return errors.New("can not decode unknown command")
 	}
@@ -95,13 +106,19 @@ func (command *Command) UnmarshalJSON(data []byte) error {
 // Message that can be sent to Play
 type Message struct {
 	*Status
-
-	Discovered *zeroconf.ServiceEntry
+	Discovered            *zeroconf.ServiceEntry
+	FirmwareUpdateMessage *FirmwareUpdateMessage
 }
 
 // Status is a message containing status information
 type Status struct {
 	Address *string
+}
+
+type FirmwareUpdateMessage struct {
+	FirmwareUpdateProgress *string
+	FirmwareUpdateSuccess  *string
+	FirmwareUpdateFailure  *string
 }
 
 // MarshalJSON ipmlements JSON encoder for messages
@@ -126,6 +143,34 @@ func (message *Message) MarshalJSON() ([]byte, error) {
 			IP:           append(message.Discovered.AddrIPv4, message.Discovered.AddrIPv6...),
 		})
 
+	} else if message.FirmwareUpdateMessage != nil {
+		fwUpdate := struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		}{}
+
+		firmwareUpdateMessage := *message.FirmwareUpdateMessage
+
+		if firmwareUpdateMessage.FirmwareUpdateProgress != nil {
+
+			fwUpdate.Type = "FirmwareUpdateProgress"
+			fwUpdate.Message = *firmwareUpdateMessage.FirmwareUpdateProgress
+
+		} else if firmwareUpdateMessage.FirmwareUpdateFailure != nil {
+
+			fwUpdate.Type = "FirmwareUpdateFailure"
+			fwUpdate.Message = *firmwareUpdateMessage.FirmwareUpdateFailure
+
+		} else if firmwareUpdateMessage.FirmwareUpdateSuccess != nil {
+
+			fwUpdate.Type = "FirmwareUpdateSuccess"
+			fwUpdate.Message = *firmwareUpdateMessage.FirmwareUpdateSuccess
+
+		} else {
+			return nil, errors.New("could not marshal firmware update message")
+		}
+
+		return json.Marshal(fwUpdate)
 	}
 
 	return nil, errors.New("could not marshal message")
@@ -293,6 +338,12 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 
 		return nil
 
+	} else if command.UpdateFirmware != nil {
+		handle.ProcessFirmwareUpdateRequest(*command.UpdateFirmware, func(msg FirmwareUpdateMessage) {
+			sendMessage(Message{
+				FirmwareUpdateMessage: &msg,
+			})
+		})
 	}
 	return nil
 }
