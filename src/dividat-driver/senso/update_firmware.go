@@ -49,6 +49,7 @@ func (handle *Handle) ProcessFirmwareUpdateRequest(command UpdateFirmware, onUpd
 		failureMsg := fmt.Sprintf("Failed to update firmware: %v", err)
 		onUpdate(FirmwareUpdateMessage{FirmwareUpdateFailure: &failureMsg})
 		handle.log.Error(failureMsg)
+		return
 	}
 	successMsg := "Firmware successfully transmitted."
 	onUpdate(FirmwareUpdateMessage{FirmwareUpdateSuccess: &successMsg})
