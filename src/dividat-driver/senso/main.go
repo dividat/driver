@@ -20,6 +20,9 @@ type Handle struct {
 	cancelCurrentConnection context.CancelFunc
 	connectionChangeMutex   *sync.Mutex
 
+	firmwareUpdateInProgress bool
+	firmwareUpdateMutex *sync.Mutex
+
 	log *logrus.Entry
 }
 
@@ -32,6 +35,8 @@ func New(ctx context.Context, log *logrus.Entry) *Handle {
 	handle.log = log
 
 	handle.connectionChangeMutex = &sync.Mutex{}
+	handle.firmwareUpdateMutex = &sync.Mutex{}
+	handle.firmwareUpdateInProgress = false
 
 	// PubSub broker
 	handle.broker = pubsub.New(32)
