@@ -265,6 +265,11 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			if handle.isUpdatingFirmware() {
+				handle.log.Info("Firmware update in progress, ignoring websocket message.")
+				continue
+			}
+
 			if messageType == websocket.BinaryMessage {
 				handle.broker.TryPub(msg, "tx")
 
@@ -339,11 +344,13 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 		return nil
 
 	} else if command.UpdateFirmware != nil {
-		handle.ProcessFirmwareUpdateRequest(*command.UpdateFirmware, func(msg FirmwareUpdateMessage) {
-			sendMessage(Message{
-				FirmwareUpdateMessage: &msg,
+		go func(){
+			handle.ProcessFirmwareUpdateRequest(*command.UpdateFirmware, func(msg FirmwareUpdateMessage) {
+				sendMessage(Message{
+					FirmwareUpdateMessage: &msg,
+				})
 			})
-		})
+		}()
 	}
 	return nil
 }

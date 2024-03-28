@@ -12,9 +12,24 @@ import (
 
 type OnUpdate func(msg FirmwareUpdateMessage)
 
+func (handle *Handle) isUpdatingFirmware() bool {
+	handle.firmwareUpdateMutex.Lock()
+	state := handle.firmwareUpdateInProgress
+	handle.firmwareUpdateMutex.Unlock()
+	return state
+}
+
+func (handle *Handle) setUpdatingFirmware(state bool) {
+	handle.firmwareUpdateMutex.Lock()
+	handle.firmwareUpdateInProgress = state
+	handle.firmwareUpdateMutex.Unlock()
+}
+
 // Disconnect from current connection
 func (handle *Handle) ProcessFirmwareUpdateRequest(command UpdateFirmware, onUpdate OnUpdate) {
+	fmt.Println("Processing firmware update request.")
 	handle.log.Info("Processing firmware update request.")
+	handle.setUpdatingFirmware(true)
 	if handle.cancelCurrentConnection != nil {
 		handle.cancelCurrentConnection()
 	}
@@ -25,7 +40,7 @@ func (handle *Handle) ProcessFirmwareUpdateRequest(command UpdateFirmware, onUpd
 		handle.log.Error(msg)
 	}
 
-	onProgress := func(progressMsg string){
+	onProgress := func(progressMsg string) {
 		onUpdate(FirmwareUpdateMessage{FirmwareUpdateProgress: &progressMsg})
 	}
 
@@ -37,6 +52,7 @@ func (handle *Handle) ProcessFirmwareUpdateRequest(command UpdateFirmware, onUpd
 	}
 	successMsg := "Firmware successfully transmitted."
 	onUpdate(FirmwareUpdateMessage{FirmwareUpdateSuccess: &successMsg})
+	handle.setUpdatingFirmware(false)
 }
 
 func decodeImage(base64Str string) (io.Reader, error) {
