@@ -19,6 +19,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -28,7 +29,6 @@ import (
 	"github.com/dividat/driver/src/dividat-driver/service"
 )
 
-const tftpPort = "69"
 const controllerPort = "55567"
 const discoveryTimeout = 60 * time.Second
 
@@ -81,7 +81,7 @@ func update(parentCtx context.Context, target service.Service, image io.Reader, 
 		onProgress("Found Senso in bootloader mode")
 	}
 
-	err := putTFTP(target.Address, tftpPort, image, onProgress)
+	err := putTFTP(target.Address, strconv.Itoa(target.ServiceEntry.Port), image, onProgress)
 	if err != nil {
 		return err
 	}

@@ -100,22 +100,7 @@ Data from Senso can be recorded using the [`recorder`](src/dividat-driver/record
 
 Like Senso data, but with `make record-flex`.
 
-### Data replayer
+### Mock Senso
 
-Recorded data can be replayed for debugging purposes.
-
-For default settings: `npm run replay`
-
-To replay an other recording: `npm run replay -- rec/senso/simple.dat`
-
-To change the replay speed: `npm run replay -- --speed=0.5 rec/senso/simple.dat`
-
-To run without looping: `npm run replay -- --once`
-
-#### Senso replay
-
-The Senso replayer will appear as a Senso network device, so both driver and replayer should be running at the same time.
-
-#### Senso Flex replay
-
-The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer. It mocks the driver with respect to the `/flex` WebSocket resource, so the driver can not be running at the same time.
+The Senso mocking tool can be used to simulate a Senso, including replaying data made with the recorder.
+Run `mock-senso --help` for documentation and usage examples.

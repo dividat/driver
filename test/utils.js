@@ -9,9 +9,9 @@ module.exports = {
   },
 
   startDriver: function (...args) {
-    return spawn('bin/dividat-driver', args)
+    return spawn('../bin/dividat-driver', args)
     // useful for debugging:
-    // return spawn('bin/dividat-driver', [], {stdio: 'inherit'})
+    // return spawn('../bin/dividat-driver', [], {stdio: 'inherit'})
   },
 
   connectWS: function (url, opts) {

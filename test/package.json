@@ -4,9 +4,7 @@
   "author": "Dividat AG <info@dividat.com>",
   "license": "MIT",
   "scripts": {
-    "test": "mocha --exit test/index.js",
-    "replay": "node tools/replay/",
-    "replay-flex": "node tools/replay-flex/"
+    "test": "mocha --exit index.js"
   },
   "dependencies": {
     "bonjour": "^3.5.0",

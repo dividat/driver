@@ -22,6 +22,8 @@ mkShell
     libtool
     flex
     pkg-config
+
+    (import ./mock-senso.nix { inherit pkgs; })
   ]
   ++ lib.optional stdenv.isLinux pcsclite
   ++ lib.optional stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.PCSC;
