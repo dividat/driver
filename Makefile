@@ -126,7 +126,7 @@ deploy: release
 	[[ $(VERSION) =~ $(SEMVER_REGEX) ]]
 
 	# Print information about channel heads and confirm
-	@echo "Channel '$(CHANNEL)' is at:"
+	@echo "Channel '$(CHANNEL)' is currently at:"
 	@echo "  $(shell git show --oneline --decorate --quiet $$(curl -s "$(RELEASE_URL)$(CHANNEL)/latest" | tr -d '\n') | tail -1)"
 	@echo
 	@echo "About to deploy $(VERSION) to '$(CHANNEL)'. Proceed? [y/N]" && read ans && [ $${ans:-N} == y ]
