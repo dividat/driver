@@ -1,13 +1,16 @@
 # Change Log
 
-## [UNRELEASED]
+## [2.4.0] - 2024-05-22
+
+### Added
+
+- Add support for triggering firmware updates via websocket
 
 ### Changed
 
 - Deny WebSocket connections from unknown origins
 - Let firmware update command look for bootloader if no Senso in regular mode is found
 - Update build system and development environment
-- Add support for triggering firmware updates via websocket
 
 ## [2.3.0] - 2022-10-01
 
