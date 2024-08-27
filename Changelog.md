@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+### Changed
+
+- Allow up to 2 minutes for device discovery in firmware updater
+
 ## [2.4.0] - 2024-05-22
 
 ### Added

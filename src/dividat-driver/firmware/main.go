@@ -30,7 +30,7 @@ import (
 
 const tftpPort = "69"
 const controllerPort = "55567"
-const discoveryTimeout = 60 * time.Second
+const discoveryTimeout = 120 * time.Second
 
 type OnProgress func(msg string)
 
