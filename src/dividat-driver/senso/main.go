@@ -3,8 +3,6 @@ package senso
 import (
 	"context"
 	"sync"
-	"time"
-
 	"github.com/cskr/pubsub"
 	"github.com/sirupsen/logrus"
 
@@ -72,8 +70,6 @@ func (handle *Handle) Connect(address string) {
 		handle.broker.TryPub(data, "rx")
 	}
 
-	go connectTCP(ctx, handle.log.WithField("channel", "data"), address+":55568", handle.broker.Sub("noTx"), onReceive)
-	time.Sleep(1000 * time.Millisecond)
 	go connectTCP(ctx, handle.log.WithField("channel", "control"), address+":55567", handle.broker.Sub("tx"), onReceive)
 
 	handle.cancelCurrentConnection = cancel
