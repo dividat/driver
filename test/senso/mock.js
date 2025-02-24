@@ -5,10 +5,9 @@ const EventEmitter = require('events')
 const net = require('net')
 
 const HOST = '127.0.0.1'
-var CONTROL_PORT = 55567
-var DATA_PORT = 55568
+const PORT = 55567
 
-function createChannel (port) {
+function createChannel () {
   const channel = new EventEmitter()
 
   var closed = false
@@ -27,7 +26,7 @@ function createChannel (port) {
   })
 
   channel._server = net.createServer()
-    .listen(port, HOST)
+    .listen(PORT, HOST)
     .on('listening', () => {
       channel.emit('listening')
     })
@@ -42,7 +41,7 @@ function createChannel (port) {
       c.on('close', () => {
         channel._connection = null
         if (!closed) {
-          channel._server.listen(port, HOST)
+          channel._server.listen(PORT, HOST)
         }
       })
     })
@@ -57,7 +56,4 @@ function createChannel (port) {
   return channel
 }
 
-module.exports = {
-  dataChannel: () => createChannel(DATA_PORT),
-  controlChannel: () => createChannel(CONTROL_PORT)
-}
+module.exports = createChannel;
