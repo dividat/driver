@@ -15,6 +15,7 @@ The functionality of this module is as follows:
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"strings"
@@ -151,6 +152,32 @@ const (
 	BODY_START_MARKER   = 'P'
 )
 
+const (
+	// row, column and pressure value, one uint8 each
+	BYTES_PER_SAMPLE_8BIT = 3
+
+	// same as above, but pressure value is 2 bytes (uint16), big-endian
+	// Note: Sensing Tex docs state value max is 2^12-1 (hence "12bit"),
+	// but in practice they seem to send values up to ~9000, so more like
+	// "14 bit".
+	BYTES_PER_SAMPLE_12BIT = 4
+)
+
+var BITDEPTH_8_CMD = []byte{'U', 'L', '\n'}
+var BITDEPTH_12_CMD = []byte{'U', 'H', '\n'}
+
+func isBitdepthCommand(cmd []byte) bool {
+	return bytes.Equal(cmd, BITDEPTH_8_CMD) || bytes.Equal(cmd, BITDEPTH_12_CMD)
+}
+
+func bitdepthCommandToBytesPerSample(cmd []byte) int {
+	if bytes.Equal(cmd, BITDEPTH_8_CMD) {
+		return BYTES_PER_SAMPLE_8BIT
+	} else {
+		return BYTES_PER_SAMPLE_12BIT
+	}
+}
+
 // Actually attempt to connect to an individual serial port and pipe its signal into the callback, summarizing
 // package units into a buffer.
 func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string, tx chan interface{}, onReceive func([]byte)) {
@@ -176,20 +203,13 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		portCtxCancel()
 	}()
 
-	// We hardcode a bitdepth of 8 for sample acquisition.
-	// In principle this could be made configurable and left to the client.
-	// However, parsing of the byte stream requires knowing the bitdepth,
-	// so in order to assemble frame packages the driver would need to
-	// intercept client-to-device commands and configure the parser
-	// accordingly. As we don't need acquisition at other than 8 bits it
-	// seems more robust to fix the mode in the driver right now.
-	BYTES_PER_SAMPLE := 3 // Row, column and sample value of 8 bit
-	BITDEPTH_8_CMD := []byte{'U', 'L', '\n'}
+	// For backwards compatibility, we set 8bit depth by default
 	_, err = port.Write(BITDEPTH_8_CMD)
 	if err != nil {
 		logger.WithField("error", err).Info("Failed to set bitdepth of 8.")
 		return
 	}
+	configuredBytesPerSample := BYTES_PER_SAMPLE_8BIT
 
 	_, err = port.Write(START_MEASUREMENT_CMD)
 	if err != nil {
@@ -214,6 +234,17 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 				data, _ := i.([]byte)
 				_, err = port.Write(data)
 				logger.WithField("bytes", data).Debug("Wrote binary command to serial out.")
+				if isBitdepthCommand(data) {
+					if err != nil {
+						logger.WithField("error", err).Info("Failed to set bitdepth.")
+					} else {
+						configuredBytesPerSample = bitdepthCommandToBytesPerSample(data)
+						// in theory we should also reset the input stream upon
+						// configuration changes, but in practice it shouldn't
+						// matter because worst case we receive a few mangled
+						// frames
+					}
+				}
 			}
 		}
 	}()
@@ -252,7 +283,7 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		case state == BODY_START && input == '\n':
 			state = BODY_READ_SAMPLE
 			buff = []byte{}
-			bytesLeftInSample = BYTES_PER_SAMPLE
+			bytesLeftInSample = configuredBytesPerSample
 		case state == BODY_READ_SAMPLE:
 			buff = append(buff, input)
 			bytesLeftInSample = bytesLeftInSample - 1
@@ -273,7 +304,7 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 					}
 				} else {
 					// Start next point
-					bytesLeftInSample = BYTES_PER_SAMPLE
+					bytesLeftInSample = configuredBytesPerSample
 				}
 			}
 		case state == UNEXPECTED_BYTE && input == HEADER_START_MARKER:
