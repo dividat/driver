@@ -2,6 +2,12 @@
 
 ## [UNRELEASED]
 
+## [3.0.0-12bit] - 2025-03-24
+
+### Changed
+
+- Set default bitdepth to 12bit for Flex v5
+
 ## [2.5.0] - 2024-09-27
 
 ### Changed
