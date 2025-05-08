@@ -22,9 +22,6 @@ mkShell
     libtool
     flex
     pkg-config
-
-    # tycmd executable for resetting controller in driver
-    tytools
   ]
   ++ lib.optional stdenv.isLinux pcsclite
   ++ lib.optional stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.PCSC;

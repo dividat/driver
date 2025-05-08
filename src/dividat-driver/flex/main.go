@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -167,9 +166,7 @@ const (
 
 var BITDEPTH_8_CMD = []byte{'U', 'L', '\n'}
 
-// NOTE: the firmware does not actually support the `UH` command, therefore the driver
-// performs a reboot of the controller upon receiving it
-var BITDEPTH_12_CMD = []byte{'U', 'H', '\n'}
+var BITDEPTH_12_CMD = []byte{'U', 'M', '\n'}
 
 func isBitdepthCommand(cmd []byte) bool {
 	return bytes.Equal(cmd, BITDEPTH_8_CMD) || bytes.Equal(cmd, BITDEPTH_12_CMD)
@@ -200,12 +197,12 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		return
 	}
 
-	portCtx, portCtxCancel := context.WithCancel(ctx)
+	readerCtx, readerCtxCancel := context.WithCancel(ctx)
 
 	defer func() {
 		logger.WithField("name", serialName).Info("Disconnecting from serial port.")
 		port.Close()
-		portCtxCancel()
+		readerCtxCancel()
 	}()
 
 	// For backwards compatibility, we set 8bit depth by default
@@ -220,7 +217,7 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 	readerDoneChan := make(chan struct{})
 
 	// Start the initial reader goroutine
-	go readFromPort(portCtx, logger, port, configuredBytesPerSample, onReceive, readerDoneChan)
+	go readFromPort(readerCtx, logger, port, configuredBytesPerSample, onReceive, readerDoneChan)
 
 	// Spawn routine to forward WebSocket commands to device
 	for {
@@ -235,54 +232,35 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 			data, _ := i.([]byte)
 
 			if isBitdepthCommand(data) {
-				// Note: bitdepth command must be the first one to be sent,
-				// because the controller will be reset and the previous
-				// configuration cleared
 				newBytesPerSample := bitdepthCommandToBytesPerSample(data)
 
 				// If bytes per sample has changed, we need to restart the reader
 				if newBytesPerSample != configuredBytesPerSample {
-
 					logger.WithFields(logrus.Fields{
 						"old": configuredBytesPerSample,
 						"new": newBytesPerSample,
-					}).Info("Bytes per sample changed, will restart reader and controller")
+					}).Info("Bytes per sample changed, will restart reader")
 
-					logger.Info("Closing port and waiting for reader to stop")
-					port.Close()
+					logger.Debug("Sending stop to reader and waiting for ack")
+					readerCtxCancel()
 					<-readerDoneChan
-					logger.Debug("Reader stopped")
+					logger.Debug("Ack received, reader stopped")
 
-					// tycmd selects the first available Teensy controller,
-					// since we don't expect to have more than one, this is fine
-					out, err := exec.Command("tycmd", "reset").Output()
-
-					if err != nil {
-						logger.WithField("err", err).Error("Failed to reset controller")
-					} else {
-						logger.Info("Successfully reset controller:\n" + string(out))
-					}
-
-					port, err = serial.Open(serialName, mode)
-					if err != nil {
-						logger.WithField("err", err).Error("Failed to re-open serial port")
-						return
-					}
-
-					// Write the command to change bit depth
 					_, err = port.Write(data)
 					if err != nil {
 						logger.WithField("error", err).Info("Failed to write new bitdepth.")
 						return
 					}
 
-					// Update configured bytes per sample
+					port.ResetInputBuffer() // flush any data that was not yet read
+
 					configuredBytesPerSample = newBytesPerSample
 
-					// Create new channels for the new reader
+					readerCtx, readerCtxCancel = context.WithCancel(ctx)
 					readerDoneChan = make(chan struct{})
+
 					// Start a new reader goroutine with updated bytesPerSample
-					go readFromPort(portCtx, logger, port, configuredBytesPerSample, onReceive, readerDoneChan)
+					go readFromPort(readerCtx, logger, port, configuredBytesPerSample, onReceive, readerDoneChan)
 				}
 			} else {
 				// For non-bitdepth commands, just forward them
