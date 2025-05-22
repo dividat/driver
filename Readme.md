@@ -118,4 +118,8 @@ The Senso replayer will appear as a Senso network device, so both driver and rep
 
 #### Senso Flex replay
 
-The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer. It mocks the driver with respect to the `/flex` WebSocket resource, so the driver can not be running at the same time.
+The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer.
+
+It mocks the driver with respect to the `/flex` WebSocket resource and the `/` metadata HTTP route, so the real driver can not be running at the same time.
+
+You can control the mocked driver version via the `--driverVersion` flag.
