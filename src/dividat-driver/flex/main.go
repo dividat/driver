@@ -15,6 +15,7 @@ The functionality of this module is as follows:
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"strings"
@@ -140,6 +141,7 @@ const (
 	WAITING_FOR_HEADER ReaderState = iota
 	HEADER_START
 	HEADER_READ_LENGTH_MSB
+	HEADER_READ_LENGTH_LSB
 	WAITING_FOR_BODY
 	BODY_START
 	BODY_READ_SAMPLE
@@ -151,6 +153,33 @@ const (
 	BODY_START_MARKER   = 'P'
 )
 
+const (
+	// row, column and pressure value, one uint8 each
+	BYTES_PER_SAMPLE_8BIT = 3
+
+	// same as above, but pressure value is 2 bytes (uint16), big-endian
+	// Note: Sensing Tex docs state value max is 2^12-1 (hence "12bit"),
+	// but in practice they seem to send values up to ~9000, so more like
+	// "14 bit".
+	BYTES_PER_SAMPLE_12BIT = 4
+)
+
+var BITDEPTH_8_CMD = []byte{'U', 'L', '\n'}
+
+var BITDEPTH_12_CMD = []byte{'U', 'M', '\n'}
+
+func isBitdepthCommand(cmd []byte) bool {
+	return bytes.Equal(cmd, BITDEPTH_8_CMD) || bytes.Equal(cmd, BITDEPTH_12_CMD)
+}
+
+func bitdepthCommandToBytesPerSample(cmd []byte) int {
+	if bytes.Equal(cmd, BITDEPTH_8_CMD) {
+		return BYTES_PER_SAMPLE_8BIT
+	} else {
+		return BYTES_PER_SAMPLE_12BIT
+	}
+}
+
 // Actually attempt to connect to an individual serial port and pipe its signal into the callback, summarizing
 // package units into a buffer.
 func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string, tx chan interface{}, onReceive func([]byte)) {
@@ -161,75 +190,137 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		StopBits: serial.OneStopBit,
 	}
 
-	START_MEASUREMENT_CMD := []byte{'S', '\n'}
-
 	logger.WithField("name", serialName).Info("Attempting to connect with serial port.")
 	port, err := serial.Open(serialName, mode)
 	if err != nil {
 		logger.WithField("config", mode).WithField("error", err).Info("Failed to open connection to serial port.")
 		return
 	}
-	portCtx, portCtxCancel := context.WithCancel(ctx)
+
+	readerCtx, readerCtxCancel := context.WithCancel(ctx)
+
 	defer func() {
 		logger.WithField("name", serialName).Info("Disconnecting from serial port.")
 		port.Close()
-		portCtxCancel()
+		readerCtxCancel()
 	}()
 
-	// We hardcode a bitdepth of 8 for sample acquisition.
-	// In principle this could be made configurable and left to the client.
-	// However, parsing of the byte stream requires knowing the bitdepth,
-	// so in order to assemble frame packages the driver would need to
-	// intercept client-to-device commands and configure the parser
-	// accordingly. As we don't need acquisition at other than 8 bits it
-	// seems more robust to fix the mode in the driver right now.
-	BYTES_PER_SAMPLE := 3 // Row, column and sample value of 8 bit
-	BITDEPTH_8_CMD := []byte{'U', 'L', '\n'}
+	// For backwards compatibility, we set 8bit depth by default
 	_, err = port.Write(BITDEPTH_8_CMD)
 	if err != nil {
 		logger.WithField("error", err).Info("Failed to set bitdepth of 8.")
 		return
 	}
+	configuredBytesPerSample := BYTES_PER_SAMPLE_8BIT
 
-	_, err = port.Write(START_MEASUREMENT_CMD)
-	if err != nil {
-		logger.WithField("error", err).Info("Failed to write start message to serial port.")
-		return
+	// Channel to receive ack that reader is done
+	readerDoneChan := make(chan struct{})
+
+	// Start the initial reader goroutine
+	go readFromPort(readerCtx, logger, port, configuredBytesPerSample, onReceive, readerDoneChan)
+
+	// Forward WebSocket commands to device
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-readerDoneChan:
+			return
+
+		case i := <-tx:
+			data, _ := i.([]byte)
+
+			if isBitdepthCommand(data) {
+				newBytesPerSample := bitdepthCommandToBytesPerSample(data)
+
+				// If bytes per sample has changed, we need to restart the reader
+				if newBytesPerSample != configuredBytesPerSample {
+					logger.WithFields(logrus.Fields{
+						"old": configuredBytesPerSample,
+						"new": newBytesPerSample,
+					}).Info("Bytes per sample changed, will restart reader")
+
+					logger.Debug("Sending stop to reader and waiting for ack")
+					readerCtxCancel()
+					<-readerDoneChan
+					logger.Debug("Ack received, reader stopped")
+
+					_, err = port.Write(data)
+					if err != nil {
+						logger.WithField("error", err).Info("Failed to write new bitdepth.")
+						return
+					}
+
+					port.ResetInputBuffer() // flush any data that was not yet read
+
+					configuredBytesPerSample = newBytesPerSample
+
+					readerCtx, readerCtxCancel = context.WithCancel(ctx)
+					readerDoneChan = make(chan struct{})
+
+					// Start a new reader goroutine with updated bytesPerSample
+					go readFromPort(readerCtx, logger, port, configuredBytesPerSample, onReceive, readerDoneChan)
+				}
+			} else {
+				// For non-bitdepth commands, just forward them
+				_, err = port.Write(data)
+				if err != nil {
+					logger.WithField("error", err).Info("Failed to write command to serial port.")
+					return
+				}
+				logger.WithField("bytes", data).Debug("Wrote binary command to serial out: " + string(data))
+			}
+		}
 	}
+}
+
+// Infinite loop for requesting and reading serial data.
+// Stops (returns) upon any error or ctx cancel.
+func readFromPort(
+	ctx context.Context,
+	logger *logrus.Entry,
+	port serial.Port,
+	bytesPerSample int,
+	onReceive func([]byte),
+	doneChan chan<- struct{},
+) {
+	defer func() {
+		// Signal that the reader has completed
+		close(doneChan)
+	}()
 
 	reader := bufio.NewReader(port)
 	state := WAITING_FOR_HEADER
 	var samplesLeftInSet int
 	var bytesLeftInSample int
 
-	// Spawn routine to forward WebSocket commands to device
-	go func() {
-		for {
-			select {
-
-			case <-portCtx.Done():
-				return
-
-			case i := <-tx:
-				data, _ := i.([]byte)
-				_, err = port.Write(data)
-				logger.WithField("bytes", data).Debug("Wrote binary command to serial out.")
-			}
-		}
-	}()
+	// Note: for Flex v4 this command seems to cause the firmware to push
+	// data as fast as we can consume it, whereas for Flex v5 it merely
+	// requests a single frame.
+	START_MEASUREMENT_CMD := []byte{'S', '\n'}
+	_, err := port.Write(START_MEASUREMENT_CMD)
+	if err != nil {
+		logger.WithField("error", err).Info("Failed to write start message to serial port.")
+		return
+	}
 
 	// Start signal acquisition
 	var buff []byte
 	for {
 		// Terminate if we were cancelled
 		if ctx.Err() != nil {
+			logger.Debug("Stopping reader: context cancelled")
 			return
 		}
 
 		input, err := reader.ReadByte()
 		if err != nil {
+			logger.WithField("err", err).Error("Error reading from serial port")
 			return
 		}
+
+		var length_msb byte
 
 		// Finite State Machine for parsing byte stream
 		switch {
@@ -238,21 +329,20 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		case state == HEADER_START && input == '\n':
 			state = HEADER_READ_LENGTH_MSB
 		case state == HEADER_READ_LENGTH_MSB:
-			// The number of measurements in each set may vary and is
-			// given as two consecutive bytes (big-endian).
-			msb := input
-			lsb, err := reader.ReadByte()
-			if err != nil {
-				return
-			}
-			samplesLeftInSet = int(binary.BigEndian.Uint16([]byte{msb, lsb}))
+			// The number of measurements in each set is given as two
+			// consecutive bytes (big-endian).
+			length_msb = input
+			state = HEADER_READ_LENGTH_LSB
+		case state == HEADER_READ_LENGTH_LSB:
+			length_lsb := input
+			samplesLeftInSet = int(binary.BigEndian.Uint16([]byte{length_msb, length_lsb}))
 			state = WAITING_FOR_BODY
 		case state == WAITING_FOR_BODY && input == BODY_START_MARKER:
 			state = BODY_START
 		case state == BODY_START && input == '\n':
 			state = BODY_READ_SAMPLE
 			buff = []byte{}
-			bytesLeftInSample = BYTES_PER_SAMPLE
+			bytesLeftInSample = bytesPerSample
 		case state == BODY_READ_SAMPLE:
 			buff = append(buff, input)
 			bytesLeftInSample = bytesLeftInSample - 1
@@ -266,6 +356,7 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 
 					// Get ready for next set and request it
 					state = WAITING_FOR_HEADER
+					// Optional for Flex v4, mandatory for v5
 					_, err = port.Write(START_MEASUREMENT_CMD)
 					if err != nil {
 						logger.WithField("error", err).Info("Failed to write poll message to serial port.")
@@ -273,7 +364,7 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 					}
 				} else {
 					// Start next point
-					bytesLeftInSample = BYTES_PER_SAMPLE
+					bytesLeftInSample = bytesPerSample
 				}
 			}
 		case state == UNEXPECTED_BYTE && input == HEADER_START_MARKER:
@@ -282,7 +373,5 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		default:
 			state = UNEXPECTED_BYTE
 		}
-
 	}
-
 }
