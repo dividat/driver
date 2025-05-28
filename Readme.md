@@ -122,4 +122,4 @@ The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as 
 
 It mocks the driver with respect to the `/flex` WebSocket resource and the `/` metadata HTTP route, so the real driver can not be running at the same time.
 
-You can control the mocked driver version via the `--driverVersion` flag.
+You can control the mocked driver version via the `--driver-version` flag.
