@@ -9,7 +9,7 @@ const EventEmitter = require('events')
 
 var recFile = argv['_'].pop() || 'rec/flex/zero.dat'
 let speedFactor = 1/(parseFloat(argv['speed']) || 1)
-let driverVersion = argv['driverVersion'] || "9.9.9-REPLAY"
+let driverVersion = argv['driver-version'] || "9.9.9-REPLAY"
 let loop = !argv['once']
 
 // Create a never ending stream of data
