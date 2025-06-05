@@ -7,12 +7,12 @@ const mock = require('./mock')
 // TESTS
 
 describe('Basic functionality', () => {
-  var driver
-  var senso = {}
+  let driver
+  let senso 
 
   beforeEach(async () => {
   // Start driver
-    var code = 0
+    let code = 0
     driver = startDriver().on('exit', (c) => {
       code = c
     })
@@ -22,15 +22,12 @@ describe('Basic functionality', () => {
     driver.removeAllListeners()
 
   // start a mock Senso
-    senso.data = mock.dataChannel()
-    senso.control = mock.controlChannel()
+    senso = mock()
   })
 
   afterEach(() => {
     driver.kill()
-
-    senso.data.close()
-    senso.control.close()
+    senso.close()
   })
 
 // Sends a command to Driver (over WS) to connect with the mock senso
@@ -43,92 +40,67 @@ describe('Basic functionality', () => {
     ws.send(cmd)
 
     // wait until mock senso has a connection
-    await Promise.all([getConnection(senso.data), getConnection(senso.control)])
+    await getConnection(senso)
 
     return ws
   }
 
   it('Can connect to a mock Senso.', async function () {
-    // It takes at least 1s to connect (as driver waits one sec between data and control connection)
-    this.timeout(1500)
+    this.timeout(500)
 
     await connectWS('ws://127.0.0.1:8382/senso')
     .then(connectWithMockSenso)
   })
 
   it('Can connect and disconnect to a mock Senso.', async function () {
-    // It takes at least 1s to connect (as driver waits one sec between data and control connection)
-    this.timeout(1500)
+    this.timeout(500)
 
-    var ws = await connectWS('ws://127.0.0.1:8382/senso')
+    const ws = await connectWS('ws://127.0.0.1:8382/senso')
 
-    var cmd = JSON.stringify({
+    const connectCmd = JSON.stringify({
       type: 'Connect',
       address: '127.0.0.1'
     })
 
-    ws.send(cmd)
+    ws.send(connectCmd)
 
-    var dataConnection = await getConnection(senso.data)
-    var controlConnection = await getConnection(senso.control)
-
-    var dataConnectionCloses = new Promise((resolve, reject) => {
-      dataConnection.on('close', () => {
+    const connection = await getConnection(senso)
+    const connectionCloses = new Promise((resolve, reject) => {
+      connection.on('close', () => {
         resolve()
       })
     })
 
-    var controlConnectionCloses = new Promise((resolve, reject) => {
-      controlConnection.on('close', () => {
-        resolve()
-      })
-    })
-
-    cmd = JSON.stringify({
+    const disconnectCmd = JSON.stringify({
       type: 'Disconnect'
     })
 
-    ws.send(cmd)
+    ws.send(disconnectCmd)
 
-    return Promise.all([dataConnectionCloses, controlConnectionCloses])
+    return connectionCloses
   })
 
   it('Disconnect on multiple Connects.', async function () {
-    // It takes at least 1s to connect (as driver waits one sec between data and control connection)
-    this.timeout(1500)
+    this.timeout(500)
 
-    var ws = await connectWS('ws://127.0.0.1:8382/senso')
-
-    var cmd = JSON.stringify({
+    const ws = await connectWS('ws://127.0.0.1:8382/senso')
+    const connectCmd = JSON.stringify({
       type: 'Connect',
       address: '127.0.0.1'
     })
 
-    ws.send(cmd)
+    ws.send(connectCmd)
 
-    var dataConnection = await getConnection(senso.data)
-    var controlConnection = await getConnection(senso.control)
-
-    var dataConnectionCloses = new Promise((resolve, reject) => {
-      dataConnection.on('close', () => {
+    const connection = await getConnection(senso)
+    const connectionCloses = new Promise((resolve, reject) => {
+      connection.on('close', () => {
         resolve()
       })
     })
 
-    var controlConnectionCloses = new Promise((resolve, reject) => {
-      controlConnection.on('close', () => {
-        resolve()
-      })
-    })
+    ws.send(connectCmd)
 
-    cmd = JSON.stringify({
-      type: 'Connect',
-      address: '127.0.0.1'
-    })
-
-    ws.send(cmd)
-
-    return Promise.all([dataConnectionCloses, controlConnectionCloses])
+    return connectionCloses;
   })
 
   it('Can get connection status', async function () {
@@ -150,15 +122,15 @@ describe('Basic functionality', () => {
     })
   })
 
-  it('Data is forwarded from Senso data channel to WS', async function () {
+  it('Data is forwarded from Senso to WS', async function () {
     const sensoWS = await connectWS('ws://127.0.0.1:8382/senso').then(connectWithMockSenso)
 
     const chunkSize = 64
     const n = 1000
-    this.timeout(1000 + n * 4 + 500)
+    this.timeout(500 + n * 4 + 500)
 
     const expectOnWS = new Promise((resolve, reject) => {
-      var received = 0
+      let received = 0
       sensoWS.on('message', (msg) => {
         received = received + msg.length
 
@@ -170,7 +142,7 @@ describe('Basic functionality', () => {
 
     const buffer = Buffer.from(new ArrayBuffer(chunkSize))
     for (var i = 0; i < n; i++) {
-      senso.data.stream.write(buffer)
+      senso.stream.write(buffer)
       // Give one ms time for forwarding
       await wait(1)
     }
@@ -178,22 +150,22 @@ describe('Basic functionality', () => {
     return expectOnWS
   })
 
-  it('Data is forwarded from WS to control channel', async function () {
+  it('Data is forwarded from WS to the Senso', async function () {
     const sensoWS = await connectWS('ws://127.0.0.1:8382/senso')
     sensoWS.send(JSON.stringify({
       type: 'Connect',
       address: '127.0.0.1'
     }))
 
-    const controlConnection = await getConnection(senso.control)
+    const connection = await getConnection(senso)
 
     const chunkSize = 64
     const n = 1000
-    this.timeout(1000 + n * 2 + 500)
+    this.timeout(500 + n * 2 + 500)
 
     const expectData = new Promise((resolve, reject) => {
-      var received = 0
-      controlConnection.on('data', (data) => {
+      let received = 0
+      connection.on('data', (data) => {
         received = received + data.length
 
         if (received >= chunkSize * n) {
