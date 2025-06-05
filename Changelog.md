@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+### Added
+
+- Add support for configurable bitdepth for Flex devices
+
 ## [2.5.0] - 2024-09-27
 
 ### Changed
