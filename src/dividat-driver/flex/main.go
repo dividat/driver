@@ -196,6 +196,7 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		logger.WithField("config", mode).WithField("error", err).Info("Failed to open connection to serial port.")
 		return
 	}
+	port.ResetInputBuffer() // flush any unread data buffered by the OS
 
 	readerCtx, readerCtxCancel := context.WithCancel(ctx)
 
