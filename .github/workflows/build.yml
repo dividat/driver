@@ -1,0 +1,80 @@
+name: Release Tag
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: DeterminateSystems/magic-nix-cache-action@v11
+      - run: nix develop --command make crossbuild_mac
+      - run: nix develop --command make crossbuild_mac_bundles
+      - name: 'Upload Artifacts'
+        uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: binaries-macos
+          path: bin/*
+
+  build-others:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: DeterminateSystems/magic-nix-cache-action@v11
+      - run: nix develop --command make crossbuild
+      - name: 'Upload Artifacts'
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-others
+          path: bin/*
+
+  release:
+    needs: [build-macos, build-others]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-*
+          path: artifacts/
+          merge-multiple: true
+
+      - run: find artifacts/ -type f
+
+      - run: ls -lh artifacts/
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create \
+            --verify-tag \
+            --notes-from-tag \
+            "$GITHUB_REF_NAME" \
+            $(find artifacts/ -maxdepth 1 -type f)
