@@ -87,7 +87,7 @@ Latest versions are available in the [release page](https://github.com/dividat/d
 For recent M-series macOS computers (Apple Silicon), download the arm64 variant
 called: `DividatDriver-arm64.app.zip`.
 
-For older macOS computers (Intel-based), download the adm64 variant called
+For older macOS computers (Intel-based), download the amd64 variant called
 `DividatDriver-amd64.app.zip`.
 
 They apps freake-signed (not notorized), so you have to [manually allow
