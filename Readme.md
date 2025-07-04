@@ -90,7 +90,7 @@ called: `DividatDriver-arm64.app.zip`.
 For older macOS computers (Intel-based), download the amd64 variant called
 `DividatDriver-amd64.app.zip`.
 
-They apps fake-signed (not notorized), so you have to [manually allow
+The apps are fake-signed (not notorized), so you have to [manually allow
 execution in macOS Settings](https://support.apple.com/en-us/102445#openanyway).
 
 ### Windows
