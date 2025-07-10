@@ -44,29 +44,54 @@ A default nix shell (defined in `nix/devShell.nix`) provides all necessary depen
 
 Releases are built as statically linked binaries for windows and linux using the cross compilation toolchain provided by nix. The toolchain is provided by nix shells defined in [crossBuild.nix](nix/crossBuild.nix). Building the binaries can be done by running `make crossbuild` from the default shell.
 
-Existing release targets:
+Existing official release targets:
 
 - Linux: x86_64 (statically linked with [musl](https://www.musl-libc.org/))
 - Windows: x86_64
 
-There are also build shells for macOS binaries, but these are not hooked into `make crossbuild` as currently they only work on macOS.
+There are also build targets for macOS binaries, but these are not hooked into `make crossbuild` as currently they only work on macOS.
+
 To build the macOS binaries:
 
 ```sh
-export VERSION=$(git describe --always HEAD)
-
-# Build for aarch64 / arm64 / Apple silicon
-nix develop .\#crossBuild.darwin.aarch64 --command ./build.sh -v "$VERSION" -i src/dividat-driver/main.go -o ./bin/dividat-driver-darwin-arm64
-
-# Build for x86_64 / amd64 / Intel
-nix develop .\#crossBuild.darwin.x86_64 --command ./build.sh -v "$VERSION" -i src/dividat-driver/main.go -o ./bin/dividat-driver-darwin-amd64
+make crossbuild_mac
 ```
+
+This will build binaries for Intel (amd64) and Silicon/M-series Macs (arm64).
+Note: recent macOS versions prevent running unsigned arm64 binaries!
+
+For non-technical-user convenience, we also provide macOS app bundles, which can
+be built using:
+
+```sh
+make crossbuild_mac_bundles
+```
+
+All tagged versions of Driver also get automatically crossbuilt and published as
+Github releases for convenience. See the [Release page for
+details](https://github.com/dividat/driver/releases). **Binaries in Github
+releases are not meant for official distribution/installations.**
 
 ### Deploying
 
 To deploy a new release run: `make deploy`. This can only be done if you have correctly tagged the revision and have AWS credentials set in your environment.
 
 ## Installation
+
+### macOS
+
+The Driver can be manually run as macOS App for testing/demo purposes.
+
+Latest versions are available in the [release page](https://github.com/dividat/driver/releases).
+
+For recent M-series macOS computers (Apple Silicon), download the arm64 variant
+called: `DividatDriver-arm64.app.zip`.
+
+For older macOS computers (Intel-based), download the amd64 variant called
+`DividatDriver-amd64.app.zip`.
+
+Because they are not indended for regular usage, these apps are only fake-signed (not notarized),
+so you have to [manually allow execution in macOS Settings](https://support.apple.com/en-us/102445#openanyway).
 
 ### Windows
 
