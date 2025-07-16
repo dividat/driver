@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
-	"errors"
+	"fmt"
 	"io"
 	"slices"
 
@@ -15,12 +15,9 @@ import (
 // Serial communication
 
 const (
-	SENSITRONICS_DRIVER_HEADER = "V2" // TODO define something more appropriate
-	HEADER_START_MARKER        = 0xFF
-	HEADER_TYPE_TERMINATOR     = 0xA // newline
-	HEADER_TYPE_FRAME          = "FS"
-	HEADER_TYPE_COMMAND_REPLY  = "CR"
-	COMMAND_REPLY_TERMINATOR   = 0xA // newline
+	DRIVER_MESSAGE_VERSION_SENSING_TEX = 0x02
+	HEADER_START_MARKER                = 0xFF
+	HEADER_TYPE_TERMINATOR             = 0xA // newline
 )
 
 // Actually attempt to connect to an individual serial port and pipe its signal into the callback, summarizing
@@ -76,77 +73,43 @@ func ConnectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 	}
 }
 
-func readFrame(reader *bufio.Reader) ([]byte, error) {
-	length_msb, err := reader.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	length_lsb, err := reader.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	samplesInSet := int(binary.BigEndian.Uint16([]byte{length_msb, length_lsb}))
-	bufSize := samplesInSet * (1 + 1 + 2)
-	frameBuf := make([]byte, bufSize, bufSize)
-	_, err = io.ReadFull(reader, frameBuf)
-	if err != nil {
-		return nil, err
-	} else {
-		length := []byte{length_msb, length_lsb}
-		return append(length, frameBuf...), nil
-	}
-}
-
-func readCommandReply(reader *bufio.Reader) ([]byte, error) {
-	command, err := reader.ReadBytes(COMMAND_REPLY_TERMINATOR)
-	if err != nil {
-		return nil, err
-	} else {
-		return append(command, COMMAND_REPLY_TERMINATOR), nil
-	}
-}
-
-func readUnknownMessage(reader *bufio.Reader) ([]byte, error) {
-	unknown, err := reader.ReadBytes(0xA)
-	if err != nil {
-		return nil, err
-	} else {
-		return append(unknown, 0xA), nil
-	}
-}
-
-type MessageType string
-
-func readHeader(reader *bufio.Reader) (MessageType, error) {
+func readMessage(reader *bufio.Reader) ([]byte, error) {
 	// read header start marker
 	marker, err := reader.ReadByte()
-
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if marker != HEADER_START_MARKER {
-		return "", errors.New("Expected header start marker")
+		return nil, fmt.Errorf("Expected header start marker, got %u", marker)
 	}
 
-	// read type from header
+	// read type from header, return will include the HEADER_TYPE_TERMINATOR
 	messageType, err := reader.ReadBytes(HEADER_TYPE_TERMINATOR)
-
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return MessageType(string(messageType)), nil
 
+	messageLengthBytesLE := make([]byte, 2, 2)
+	_, err = io.ReadFull(reader, messageLengthBytesLE)
+	if err != nil {
+		return nil, err
+	}
+
+	messageLength := uint(binary.LittleEndian.Uint16(messageLengthBytesLE))
+
+	messageBody := make([]byte, messageLength, messageLength)
+	_, err = io.ReadFull(reader, messageBody)
+	if err != nil {
+		return nil, err
+	}
+
+	return slices.Concat([]byte{marker}, messageType, messageLengthBytesLE, messageBody), nil
 }
 
-func serializeHeader(messageType MessageType) []byte {
-	return slices.Concat([]byte{HEADER_START_MARKER}, []byte(messageType), []byte{HEADER_TYPE_TERMINATOR})
-}
-
-func serializeMessage(messageType MessageType, message []byte) []byte {
-	driverHeader := []byte(SENSITRONICS_DRIVER_HEADER)
-	firmwareHeader := serializeHeader(messageType)
-	return slices.Concat(driverHeader, firmwareHeader, message)
+func addDriverHeader(message []byte) []byte {
+	driverHeader := []byte{DRIVER_MESSAGE_VERSION_SENSING_TEX}
+	return append(driverHeader, message...)
 }
 
 // Infinite loop for requesting and reading serial data.
@@ -180,36 +143,13 @@ func readFromPort(
 			return
 		}
 
-		messageType, err := readHeader(reader)
+		message, err := readMessage(reader)
 		if err != nil {
 			logger.WithField("err", err).Error("Error reading from serial port")
 			return
 		}
 
-		switch messageType {
-		case HEADER_TYPE_FRAME:
-			frame, err := readFrame(reader)
-			if err != nil {
-				logger.WithField("err", err).Error("Error reading from serial port")
-				return
-			}
-			msg := serializeMessage(messageType, frame)
-			onReceive(msg)
-		case HEADER_TYPE_COMMAND_REPLY:
-			commandReply, err := readCommandReply(reader)
-			if err != nil {
-				logger.WithField("err", err).Error("Error reading from serial port")
-				return
-			}
-			msg := serializeMessage(messageType, commandReply)
-			onReceive(msg)
-		default:
-			unknown, err := readUnknownMessage(reader)
-			if err != nil {
-				logger.WithField("err", err).Error("error reading from serial port")
-				return
-			}
-			logger.WithField("msgType", messageType).WithField("msgBody", unknown).Warn("Unknown message type")
-		}
+		messageWithDriverHeader := addDriverHeader(message)
+		onReceive(messageWithDriverHeader)
 	}
 }

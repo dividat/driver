@@ -26,7 +26,7 @@ const (
 )
 
 const (
-	SENSING_TEX_DRIVER_HEADER = "V1" // TODO define something proper
+	DRIVER_MESSAGE_VERSION_SENSING_TEX = 0x01
 )
 
 const (
@@ -234,7 +234,7 @@ func readFromPort(
 
 				if samplesLeftInSet <= 0 {
 					// Finish and send set
-					bufWithHeader := append([]byte(SENSING_TEX_DRIVER_HEADER), buff...)
+					bufWithHeader := append([]byte{DRIVER_MESSAGE_VERSION_SENSING_TEX}, buff...)
 					onReceive(bufWithHeader)
 
 					// Get ready for next set and request it
