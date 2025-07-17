@@ -139,6 +139,9 @@ func isFlexLike(port *enumerator.PortDetails) bool {
 // Vendor IDs:
 //
 //	16C0 - Van Ooijen Technische Informatica (Teensy)
+//
+// Product name: Dividat16x16
+// Manufacturer name: Sensitronics (not used in the check)
 func isSensitronicsLike(port *enumerator.PortDetails) bool {
 	vendorId := strings.ToUpper(port.VID)
 	product := strings.ToUpper(port.Product)
