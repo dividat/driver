@@ -15,9 +15,9 @@ import (
 // Serial communication
 
 const (
-	DRIVER_MESSAGE_VERSION_SENSING_TEX = 0x02
-	HEADER_START_MARKER                = 0xFF
-	HEADER_TYPE_TERMINATOR             = 0xA // newline
+	DRIVER_PROTOCOL_VERSION = 0x02
+	HEADER_START_MARKER     = 0xFF
+	HEADER_TYPE_TERMINATOR  = 0xA // newline
 )
 
 // Actually attempt to connect to an individual serial port and pipe its signal into the callback, summarizing
@@ -108,7 +108,7 @@ func readMessage(reader *bufio.Reader) ([]byte, error) {
 }
 
 func addDriverHeader(message []byte) []byte {
-	driverHeader := []byte{DRIVER_MESSAGE_VERSION_SENSING_TEX}
+	driverHeader := []byte{DRIVER_PROTOCOL_VERSION}
 	return append(driverHeader, message...)
 }
 

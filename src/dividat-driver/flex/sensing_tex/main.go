@@ -26,7 +26,7 @@ const (
 )
 
 const (
-	DRIVER_MESSAGE_VERSION_SENSING_TEX = 0x01
+	DRIVER_PROTOCOL_VERSION = 0x01
 )
 
 const (
@@ -234,7 +234,7 @@ func readFromPort(
 
 				if samplesLeftInSet <= 0 {
 					// Finish and send set
-					bufWithHeader := append([]byte{DRIVER_MESSAGE_VERSION_SENSING_TEX}, buff...)
+					bufWithHeader := append([]byte{DRIVER_PROTOCOL_VERSION}, buff...)
 					onReceive(bufWithHeader)
 
 					// Get ready for next set and request it
