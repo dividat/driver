@@ -1,15 +1,22 @@
 package flex
 
-/* Connects to Senso Flex devices through a serial connection and combines serial data into measurement sets.
-
-This helps establish an indirect WebSocket connection to receive a stream of samples from the device.
+/* Connects to Senso Flex devices through a serial connection and chunks serial
+data into self-contained messages to be delivered over a WebSocket.
 
 The functionality of this module is as follows:
 
 - While connected, scan for serial devices that look like a potential Flex device
-- Connect to suitable serial devices and start polling for measurements
-- Minimally parse incoming data to determine start and end of a measurement
-- Send each complete measurement set to client as a binary package
+- Connect to a suitable serial device and start reading serial data
+- Minimally parse incoming data to determine start and end of a message
+- Tag the message with a DRIVER_PROTOCOL_VERSION
+- Send each complete message set to client as a binary package
+
+The module also forwards any incomding serial commands from the WebSocket to the
+serial device "as is".
+
+For Sensing Tex controllers, the serial data is parsed and only the frame samples are send over the WebSocket. DRIVER_PROTOCOL_VERSION = 0x01
+
+For Sensitronics controllers, the messages are chunked in an opaque way and all valid messages get sent over the WebSocket. DRIVER_PROTOCOL_VERSION = 0x02
 
 */
 
