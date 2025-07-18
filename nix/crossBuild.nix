@@ -43,7 +43,7 @@ in
       muslPkgs = pkgs.pkgsCross.musl64;
       cc = muslPkgs.gcc;
       static-pcsclite = muslPkgs.pcsclite.overrideAttrs (attrs: {
-        configureFlags = attrs.configureFlags ++ [ "--enable-static" "--disable-shared" ];
+        mesonFlags = attrs.mesonFlags ++ [ (pkgs.lib.mesonOption "default_library" "static") ];
       });
     in
     mkCrossBuildShell {
