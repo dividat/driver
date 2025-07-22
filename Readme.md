@@ -1,7 +1,5 @@
 # Dividat Driver
 
-[![Build status](https://badge.buildkite.com/6a69682e2acf50cec89f8c64935b8b591beda5635db479b92a.svg)](https://buildkite.com/dividat/driver)
-
 Dividat drivers and hardware test suites.
 
 ## Development

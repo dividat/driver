@@ -1,9 +1,0 @@
-steps:
-  - label: "Test"
-    command: "nix develop --command make test"
-
-  - label: "Cross build"
-    command: "nix develop --command make crossbuild"
-
-  - label: "Formatting"
-    command: 'nix develop --command gofmt -d . && test -z "$(nix develop --command gofmt -l .)"'
