@@ -91,20 +91,6 @@ For older macOS computers (Intel-based), download the amd64 variant called
 Because they are not indended for regular usage, these apps are only fake-signed (not notarized),
 so you have to [manually allow execution in macOS Settings](https://support.apple.com/en-us/102445#openanyway).
 
-### Windows
-
-This application can be run as a Windows service (<https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/new-service>).
-
-A PowerShell script is provided to download and install the latest version as a Windows service. Run it with the following command in a PowerShell.
-
-**Note:** You need to run it as an administrator.
-
-```
-PS C:\ Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/dividat/driver/main/install.ps1'))
-```
-
-Please have a look at the [script](install.ps1) before running it on your system.
-
 ## Compatibility
 
 To be able to connect to the driver from within a web app delivered over HTTPS, browsers need to consider the loopback address as a trustworthy origin even when not using TLS. This is the case for most modern browsers, with the exception of Safari (https://bugs.webkit.org/show_bug.cgi?id=171934).
