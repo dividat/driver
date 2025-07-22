@@ -1,7 +1,5 @@
 # Dividat Driver
 
-[![Build status](https://badge.buildkite.com/6a69682e2acf50cec89f8c64935b8b591beda5635db479b92a.svg)](https://buildkite.com/dividat/driver)
-
 Dividat drivers and hardware test suites.
 
 ## Development
@@ -9,6 +7,8 @@ Dividat drivers and hardware test suites.
 ### Prerequisites
 
 [Nix](https://nixos.org/nix) is required for installing dependencies and providing a suitable development environment.
+
+The default nix shell (defined in `nix/devShell.nix`) provides all necessary dependencies for building on your native system (i.e. Linux or Darwin).
 
 ### Quick start
 
@@ -32,30 +32,29 @@ Normalize formatting with: `make format`.
 
 Code is formatted with `gofmt` and normalized formatting is required for CI to pass.
 
-### Releasing
+### Static binaries and releasing
 
-#### Building
+All tagged versions of Driver get automatically published as Github releases for
+convenience. See the [Release page for
+details](https://github.com/dividat/driver/releases).
 
-**Currently releases can only be made from Linux.**
+Releases are built as statically linked binaries for Linux, Windows and macOS
+using the cross compilation toolchain provided by nix (see
+[crossBuild.nix](nix/crossBuild.nix)). 
 
-To create a release run: `make release`.
-
-A default nix shell (defined in `nix/devShell.nix`) provides all necessary dependencies for building on your native system (i.e. Linux or Darwin). Running `make` will create a binary that should run on your system (at least in the default environemnt).
-
-Releases are built as statically linked binaries for windows and linux using the cross compilation toolchain provided by nix. The toolchain is provided by nix shells defined in [crossBuild.nix](nix/crossBuild.nix). Building the binaries can be done by running `make crossbuild` from the default shell.
-
-Existing official release targets:
+Existing targets:
 
 - Linux: x86_64 (statically linked with [musl](https://www.musl-libc.org/))
 - Windows: x86_64
+- macOS: x86_64 (Intel) and arm64 (M-series)
 
-There are also build targets for macOS binaries, but these are not hooked into `make crossbuild` as currently they only work on macOS.
+On Linux, it is only possible to crossbuild for Linux and Windows, using:
 
-To build the macOS binaries:
+    make crossbuild
 
-```sh
-make crossbuild_mac
-```
+Crossbuilding for macOS requires a macOS host, using:
+
+    make crossbuild_mac
 
 This will build binaries for Intel (amd64) and Silicon/M-series Macs (arm64).
 Note: recent macOS versions prevent running unsigned arm64 binaries!
@@ -67,22 +66,25 @@ be built using:
 make crossbuild_mac_bundles
 ```
 
-All tagged versions of Driver also get automatically crossbuilt and published as
-Github releases for convenience. See the [Release page for
-details](https://github.com/dividat/driver/releases). **Binaries in Github
-releases are not meant for official distribution/installations.**
-
-### Deploying
-
-To deploy a new release run: `make deploy`. This can only be done if you have correctly tagged the revision and have AWS credentials set in your environment.
+Note: binaries in Github releases are not meant for official installations,
+since they are not signed. E.g. [PlayOS](https://github.com/dividat/playos)
+builds the Driver from source.
 
 ## Installation
 
-### macOS
-
-The Driver can be manually run as macOS App for testing/demo purposes.
+Driver can be run as standalone application for testing/demo purposes.
 
 Latest versions are available in the [release page](https://github.com/dividat/driver/releases).
+
+### Windows
+
+Download the `dividat-driver-windows-amd64.exe` file from the release page and
+run it. You might need to grant access to the local network.
+
+### macOS
+
+Both plain binaries and app bundles are provided for macOS. For convenience, we
+recommend using the app bundles.
 
 For recent M-series macOS computers (Apple Silicon), download the arm64 variant
 called: `DividatDriver-arm64.app.zip`.
@@ -90,22 +92,8 @@ called: `DividatDriver-arm64.app.zip`.
 For older macOS computers (Intel-based), download the amd64 variant called
 `DividatDriver-amd64.app.zip`.
 
-Because they are not indended for regular usage, these apps are only fake-signed (not notarized),
+Because they are not intended for regular usage, these apps are only fake-signed (not notarized),
 so you have to [manually allow execution in macOS Settings](https://support.apple.com/en-us/102445#openanyway).
-
-### Windows
-
-This application can be run as a Windows service (<https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/new-service>).
-
-A PowerShell script is provided to download and install the latest version as a Windows service. Run it with the following command in a PowerShell.
-
-**Note:** You need to run it as an administrator.
-
-```
-PS C:\ Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/dividat/driver/main/install.ps1'))
-```
-
-Please have a look at the [script](install.ps1) before running it on your system.
 
 ## Compatibility
 

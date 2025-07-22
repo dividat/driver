@@ -9,13 +9,6 @@ mkShell
     # node for tests
     nodejs
 
-    # for building releases
-    openssl
-    upx
-
-    # for deployment to S3
-    awscli
-
     # Required for building go dependencies
     autoconf
     automake
