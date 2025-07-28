@@ -37,7 +37,7 @@ Code is formatted with `gofmt` and normalized formatting is required for CI to p
 - Update Changelog with `$VERSION` and date
 - Commit and tag the commit with: `git tag -a $VERSION -m $VERSION`
 - Update changelog to add `[UNRELEASED]` heading, commit
-- Push to main, including tag
+- Push to `main`, including tag
 - Verify new `$VERSION` becomes available in
   [Releases](https://github.com/dividat/driver/releases) (requires [Release workflow](https://github.com/dividat/driver/actions/workflows/release.yml) to complete).
 
