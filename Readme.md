@@ -32,7 +32,16 @@ Normalize formatting with: `make format`.
 
 Code is formatted with `gofmt` and normalized formatting is required for CI to pass.
 
-### Static binaries and releasing
+### Release process
+
+- Update Changelog with `$VERSION` and date
+- Commit and tag the commit with: `git tag -a $VERSION -m $VERSION`
+- Update changelog to add `[UNRELEASED]` heading, commit
+- Push to main, including tag
+- Verify new `$VERSION` becomes available in
+  [Releases](https://github.com/dividat/driver/releases) (requires [Release workflow](https://github.com/dividat/driver/actions/workflows/release.yml) to complete).
+
+### Static binaries
 
 All tagged versions of Driver get automatically published as Github releases for
 convenience. See the [Release page for
