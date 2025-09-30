@@ -62,8 +62,10 @@ const driverMetadata = {
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/') {
-    res.writeHead(200, {'Content-Type': 'application/json'});
-    res.writeHead(200, {'Access-Control-Allow-Origin': '*'});
+    res.writeHead(200,
+        {'Content-Type': 'application/json',
+         'Access-Control-Allow-Origin': '*'}
+    );
     res.end(JSON.stringify(driverMetadata));
   } else {
     res.writeHead(404);
