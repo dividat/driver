@@ -1,5 +1,7 @@
 # Change Log
 
+## [UNRELEASED]
+
 ## [2.7.0] - 2025-10-15
 
 ### Added
