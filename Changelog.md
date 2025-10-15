@@ -1,6 +1,14 @@
 # Change Log
 
-## [UNRELEASED]
+## [2.7.0] - 2025-10-15
+
+### Added
+
+- Add a macOS app build output for tester convenience
+
+### Changed
+
+- Windows service is replaced with a simple executable
 
 ## [2.6.0] - 2025-06-06
 
