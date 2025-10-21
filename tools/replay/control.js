@@ -1,8 +1,8 @@
 // Mock Senso responses
 
 // Firmware version to report in DEV_INFO
-const VERSION_MAJOR = 2
-const VERSION_MINOR = 0
+const VERSION_MAJOR = 3
+const VERSION_MINOR = 10
 const VERSION_FEATURE = 0
 const VERSION_FIX = 0
 
