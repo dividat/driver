@@ -10,6 +10,7 @@ const EventEmitter = require('events')
 var recFile = argv['_'].pop() || 'rec/flex/zero.dat'
 let speedFactor = 1/(parseFloat(argv['speed']) || 1)
 let driverVersion = argv['driver-version'] || "9.9.9-REPLAY"
+let protocolVersion = argv['protocol-version'] || null
 let loop = !argv['once']
 
 // Create a never ending stream of data
@@ -33,7 +34,12 @@ function Replayer (recFile) {
         timeout = 20
       }
       var buf = Buffer.from(msg, 'base64')
-      emitter.emit('data', buf)
+      var protocolVersionHeader = new Uint8Array([])
+      if (protocolVersion != null) {
+          protocolVersionHeader = new Uint8Array([parseInt(protocolVersion, 10)])
+      }
+      var bufWithProtocol = Buffer.concat([protocolVersionHeader, buf])
+      emitter.emit('data', bufWithProtocol)
 
       setTimeout(() => {
         stream.resume()
