@@ -9,81 +9,119 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dividat/driver/src/dividat-driver/firmware"
+	"github.com/dividat/driver/src/dividat-driver/service"
+	"github.com/dividat/driver/src/dividat-driver/util/websocket"
 )
+
+// pubsub topic names, must be unique
+const brokerTopicRx = "rx"
+const brokerTopicTx = "tx"
 
 // Handle for managing Senso
 type Handle struct {
-	broker *pubsub.PubSub
+	websocket.Handle
+}
 
-	Address *string
-
+type DeviceBackend struct {
 	ctx context.Context
+	log *logrus.Entry
+
+	address        *string
+	firmwareUpdate *firmware.Update
+
+	broker *pubsub.PubSub
 
 	cancelCurrentConnection context.CancelFunc
 	connectionChangeMutex   *sync.Mutex
+}
 
-	firmwareUpdate *firmware.Update
+func (backend *DeviceBackend) RegisterSubscriber() {
+	// noop
+	return
+}
 
-	log *logrus.Entry
+func (backend *DeviceBackend) Discover(duration int, ctx context.Context, log *logrus.Entry) chan service.Service {
+	discoveryCtx, _ := context.WithTimeout(ctx, time.Duration(duration)*time.Second)
+	return service.Scan(discoveryCtx)
+}
+
+func (backend *DeviceBackend) Address() *string {
+	return backend.address
+}
+
+func (backend *DeviceBackend) IsUpdatingFirmware() bool {
+	return backend.firmwareUpdate.IsUpdating()
 }
 
 // New returns an initialized Senso handler
 func New(ctx context.Context, log *logrus.Entry) *Handle {
-	handle := Handle{}
+	backend := DeviceBackend{
+		ctx: ctx,
+		log: log,
 
-	handle.ctx = ctx
+		broker: pubsub.New(32),
 
-	handle.log = log
+		connectionChangeMutex: &sync.Mutex{},
+		firmwareUpdate:        firmware.InitialUpdateState(),
+	}
 
-	handle.connectionChangeMutex = &sync.Mutex{}
-	handle.firmwareUpdate = firmware.InitialUpdateState()
-
-	// PubSub broker
-	handle.broker = pubsub.New(32)
+	websocketHandle := websocket.Handle{
+		DeviceBackend: &backend,
+		Broker:        backend.broker,
+		BrokerRx:      brokerTopicRx,
+		BrokerTx:      brokerTopicTx,
+		Log:           log,
+	}
+	handle := Handle{Handle: websocketHandle}
 
 	// Clean up
 	go func() {
 		<-ctx.Done()
-		handle.broker.Shutdown()
+		backend.broker.Shutdown()
 	}()
 
 	return &handle
 }
 
+func (backend *DeviceBackend) DeregisterSubscriber() {
+	// noop
+}
+
 // Connect to a Senso, will create TCP connections to control and data ports
-func (handle *Handle) Connect(address string) {
+func (backend *DeviceBackend) Connect(address string) {
 
 	// Only allow one connection change at a time
-	handle.connectionChangeMutex.Lock()
-	defer handle.connectionChangeMutex.Unlock()
+	backend.connectionChangeMutex.Lock()
+	defer backend.connectionChangeMutex.Unlock()
 
 	// disconnect current connection first
-	handle.Disconnect()
+	backend.Disconnect()
 
-	// set address in handle
-	handle.Address = &address
+	// set address in backend
+	backend.address = &address
 
-	// Create a child context for a new connection. This allows an individual connection (attempt) to be cancelled without restarting the whole Senso handler
-	ctx, cancel := context.WithCancel(handle.ctx)
+	// Create a child context for a new connection. This allows an individual connection (attempt) to be cancelled without restarting the whole Senso backendr
+	ctx, cancel := context.WithCancel(backend.ctx)
 
-	handle.log.WithField("address", address).Info("Attempting to connect with Senso.")
+	backend.log.WithField("address", address).Info("Attempting to connect with Senso.")
 
 	onReceive := func(data []byte) {
-		handle.broker.TryPub(data, "rx")
+		backend.broker.TryPub(data, brokerTopicRx)
 	}
 
-	go connectTCP(ctx, handle.log.WithField("channel", "data"), address+":55568", handle.broker.Sub("noTx"), onReceive)
+	// TODO: noTx??
+	go connectTCP(ctx, backend.log.WithField("channel", "data"), address+":55568", backend.broker.Sub("noTx"), onReceive)
 	time.Sleep(1000 * time.Millisecond)
-	go connectTCP(ctx, handle.log.WithField("channel", "control"), address+":55567", handle.broker.Sub("tx"), onReceive)
+	go connectTCP(ctx, backend.log.WithField("channel", "control"), address+":55567", backend.broker.Sub(brokerTopicTx), onReceive)
 
-	handle.cancelCurrentConnection = cancel
+	backend.cancelCurrentConnection = cancel
 }
 
 // Disconnect from current connection
-func (handle *Handle) Disconnect() {
-	if handle.cancelCurrentConnection != nil {
-		handle.log.Info("Disconnecting from Senso.")
-		handle.cancelCurrentConnection()
-		handle.Address = nil
+func (backend *DeviceBackend) Disconnect() {
+	if backend.cancelCurrentConnection != nil {
+		backend.log.Info("Disconnecting from Senso.")
+		backend.cancelCurrentConnection()
+		backend.address = nil
 	}
 }

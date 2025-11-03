@@ -1,4 +1,5 @@
-package senso
+// common parts to senso.websocket and flex.websocket
+package websocket
 
 import (
 	"context"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cskr/pubsub"
 	"github.com/gorilla/websocket"
 	"github.com/libp2p/zeroconf/v2"
 	"github.com/sirupsen/logrus"
@@ -181,11 +183,38 @@ func (message *Message) MarshalJSON() ([]byte, error) {
 
 }
 
-// Implement net/http Handler interface
+type SendMsg struct {
+	Progress func(string)
+	Failure  func(string)
+	Success  func(string)
+}
+
+type DeviceBackend interface {
+	// TODO: will not work for Flex
+	Address() *string
+	Discover(duration int, ctx context.Context, log *logrus.Entry) chan service.Service
+	Connect(address string)
+	Disconnect()
+	RegisterSubscriber()
+	DeregisterSubscriber()
+	ProcessFirmwareUpdateRequest(command UpdateFirmware, send SendMsg)
+	IsUpdatingFirmware() bool
+}
+
+type Handle struct {
+	Broker   *pubsub.PubSub
+	BrokerRx string
+	BrokerTx string
+
+	Log *logrus.Entry
+
+	DeviceBackend DeviceBackend
+}
+
 func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Set up logger
-	var log = handle.log.WithFields(logrus.Fields{
+	var log = handle.Log.WithFields(logrus.Fields{
 		"clientAddress": r.RemoteAddr,
 		"userAgent":     r.UserAgent(),
 	})
@@ -236,8 +265,11 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	// Create channels with data received from Senso
-	rx := handle.broker.Sub("rx")
+	// Create channels with data received from device
+	rx := handle.Broker.Sub(handle.BrokerRx)
+
+	// TODO: remove once Flex handles commands
+	handle.DeviceBackend.RegisterSubscriber()
 
 	// send data from Control and Data channel
 	go rx_data_loop(ctx, rx, sendBinary)
@@ -245,7 +277,10 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Helper function to close the connection
 	close := func() {
 		// Unsubscribe from broker
-		handle.broker.Unsub(rx)
+		handle.Broker.Unsub(rx)
+
+		// TODO: remove once Flex handles commands
+		handle.DeviceBackend.DeregisterSubscriber()
 
 		// Cancel the context
 		cancel()
@@ -271,12 +306,12 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			if messageType == websocket.BinaryMessage {
 
-				if handle.firmwareUpdate.IsUpdating() {
-					handle.log.Debug("Ignoring Senso command during firmware update.")
+				if handle.DeviceBackend.IsUpdatingFirmware() {
+					handle.Log.Debug("Ignoring device command during firmware update.")
 					continue
 				}
 
-				handle.broker.TryPub(msg, "tx")
+				handle.Broker.TryPub(msg, handle.BrokerTx)
 
 			} else if messageType == websocket.TextMessage {
 
@@ -288,7 +323,7 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				log.WithField("command", prettyPrintCommand(command)).Debug("Received command.")
 
-				if handle.firmwareUpdate.IsUpdating() && (command.GetStatus == nil || command.Discover == nil) {
+				if handle.DeviceBackend.IsUpdatingFirmware() && (command.GetStatus == nil || command.Discover == nil) {
 					log.WithField("command", prettyPrintCommand(command)).Debug("Ignoring command during firmware update.")
 					continue
 				}
@@ -310,10 +345,10 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, command Command, sendMessage func(Message) error) error {
 
 	if command.GetStatus != nil {
-
+		// TODO: think about a general Status interface
 		var message Message
 
-		message.Status = &Status{Address: handle.Address}
+		message.Status = &Status{Address: handle.DeviceBackend.Address()}
 
 		err := sendMessage(message)
 
@@ -322,19 +357,17 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 		}
 
 	} else if command.Connect != nil {
-		handle.Connect(command.Connect.Address)
+		handle.DeviceBackend.Connect(command.Connect.Address)
 		return nil
 
 	} else if command.Disconnect != nil {
-		handle.Disconnect()
+		handle.DeviceBackend.Disconnect()
 		return nil
 
 	} else if command.Discover != nil {
+		entries := handle.DeviceBackend.Discover(command.Discover.Duration, ctx, log)
 
-		discoveryCtx, _ := context.WithTimeout(ctx, time.Duration(command.Discover.Duration)*time.Second)
-
-		entries := service.Scan(discoveryCtx)
-
+		// TODO: the async interface makes little sense for Flex
 		go func(entries chan service.Service) {
 			for entry := range entries {
 				log.WithField("service", entry).Debug("Discovered service.")
@@ -349,19 +382,20 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 
 			}
 			log.Debug("Discovery finished.")
+			// TODO: client needs to know it's finished too!
 		}(entries)
 
 		return nil
 
 	} else if command.UpdateFirmware != nil {
-		go handle.ProcessFirmwareUpdateRequest(*command.UpdateFirmware, SendMsg{
-			progress: func(msg string) {
+		go handle.DeviceBackend.ProcessFirmwareUpdateRequest(*command.UpdateFirmware, SendMsg{
+			Progress: func(msg string) {
 				sendMessage(firmwareUpdateProgress(msg))
 			},
-			failure: func(msg string) {
+			Failure: func(msg string) {
 				sendMessage(firmwareUpdateFailure(msg))
 			},
-			success: func(msg string) {
+			Success: func(msg string) {
 				sendMessage(firmwareUpdateSuccess(msg))
 			},
 		})
@@ -385,7 +419,7 @@ func firmwareUpdateMessage(msg FirmwareUpdateMessage) Message {
 	return Message{FirmwareUpdateMessage: &msg}
 }
 
-// rx_data_loop reads data from Senso and forwards it up the WebSocket
+// rx_data_loop reads data from device and forwards it up the WebSocket
 func rx_data_loop(ctx context.Context, rx chan interface{}, send func([]byte) error) {
 	var err error
 	for {

@@ -25,64 +25,122 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.bug.st/serial"
 	"go.bug.st/serial/enumerator"
+
+	"github.com/dividat/driver/src/dividat-driver/service"
+	"github.com/dividat/driver/src/dividat-driver/util/websocket"
 )
 
-// Handle for managing SensingTex connection
+// pubsub topic names, must be unique
+const brokerTopicRx = "flex-rx"
+const brokerTopicTx = "flex-tx"
+
+// Handle for managing Flex
 type Handle struct {
+	websocket.Handle
+}
+
+type DeviceBackend struct {
+	ctx context.Context
+	log *logrus.Entry
+
+	address *string
+
 	broker *pubsub.PubSub
 
-	ctx context.Context
-
 	cancelCurrentConnection context.CancelFunc
-	subscriberCount         int
 
-	log *logrus.Entry
+	subscriberCount int
 }
 
 // New returns an initialized handler
 func New(ctx context.Context, log *logrus.Entry) *Handle {
-	handle := Handle{
+	backend := DeviceBackend{
+		ctx: ctx,
+		log: log,
+
 		broker: pubsub.New(32),
-		ctx:    ctx,
-		log:    log,
+
+		subscriberCount: 0,
 	}
+
+	websocketHandle := websocket.Handle{
+		DeviceBackend: &backend,
+		Broker:        backend.broker,
+		BrokerRx:      brokerTopicRx,
+		BrokerTx:      brokerTopicTx,
+		Log:           log,
+	}
+
+	handle := Handle{Handle: websocketHandle}
 
 	// Clean up
 	go func() {
 		<-ctx.Done()
-		handle.broker.Shutdown()
+		backend.broker.Shutdown()
 	}()
 
 	return &handle
 }
 
 // Connect to device
-func (handle *Handle) Connect() {
-	handle.subscriberCount++
+// TODO: address is ignored
+func (backend *DeviceBackend) Connect(address string) {
+	backend.subscriberCount++
 
 	// If there is no existing connection, create it
-	if handle.cancelCurrentConnection == nil {
-		ctx, cancel := context.WithCancel(handle.ctx)
+	if backend.cancelCurrentConnection == nil {
+		ctx, cancel := context.WithCancel(backend.ctx)
 
 		onReceive := func(data []byte) {
-			handle.broker.TryPub(data, "flex-rx")
+			backend.broker.TryPub(data, brokerTopicRx)
 		}
 
-		go listeningLoop(ctx, handle.log, handle.broker.Sub("flex-tx"), onReceive)
+		go listeningLoop(ctx, backend.log, backend.broker.Sub(brokerTopicTx), onReceive)
 
-		handle.cancelCurrentConnection = cancel
+		backend.cancelCurrentConnection = cancel
 	}
+}
+
+func (backend *DeviceBackend) Disconnect() {
+	backend.cancelCurrentConnection()
+	backend.cancelCurrentConnection = nil
+}
+
+func (backend *DeviceBackend) RegisterSubscriber() {
+	// simulate current setup - auto-connect without commands
+	backend.Connect("")
 }
 
 // Deregister subscribers and disconnect when none left
-func (handle *Handle) DeregisterSubscriber() {
-	handle.subscriberCount--
+func (backend *DeviceBackend) DeregisterSubscriber() {
+	backend.subscriberCount--
 
-	if handle.subscriberCount == 0 && handle.cancelCurrentConnection != nil {
-		handle.cancelCurrentConnection()
-		handle.cancelCurrentConnection = nil
+	if backend.subscriberCount == 0 && backend.cancelCurrentConnection != nil {
+		backend.Disconnect()
 	}
 }
+
+// DeviceBackend stubs
+
+func (backend *DeviceBackend) Discover(duration int, ctx context.Context, log *logrus.Entry) chan service.Service {
+	// TODO: implement Discover
+	return nil
+}
+
+func (backend *DeviceBackend) Address() *string {
+	return nil
+}
+
+func (backend *DeviceBackend) IsUpdatingFirmware() bool {
+	return false
+}
+
+func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command websocket.UpdateFirmware, send websocket.SendMsg) {
+	// noop
+	return
+}
+
+// internal
 
 // Keep looking for serial devices and connect to them when found, sending signals into the
 // callback.
