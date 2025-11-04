@@ -18,10 +18,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"net/http"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/cskr/pubsub"
+	"github.com/libp2p/zeroconf/v2"
 	"github.com/sirupsen/logrus"
 	"go.bug.st/serial"
 	"go.bug.st/serial/enumerator"
@@ -43,11 +45,12 @@ type DeviceBackend struct {
 	ctx context.Context
 	log *logrus.Entry
 
-	address *string
+	serialName *string
 
 	broker *pubsub.PubSub
 
 	cancelCurrentConnection context.CancelFunc
+	connectionChangeMutex   *sync.Mutex
 
 	subscriberCount int
 }
@@ -59,6 +62,8 @@ func New(ctx context.Context, log *logrus.Entry) *Handle {
 		log: log,
 
 		broker: pubsub.New(32),
+
+		connectionChangeMutex: &sync.Mutex{},
 
 		subscriberCount: 0,
 	}
@@ -83,11 +88,17 @@ func New(ctx context.Context, log *logrus.Entry) *Handle {
 }
 
 // Connect to device
-// TODO: address is ignored
 func (backend *DeviceBackend) Connect(address string) {
-	backend.subscriberCount++
+	// Only allow one connection change at a time
+	backend.connectionChangeMutex.Lock()
+	defer backend.connectionChangeMutex.Unlock()
 
-	// If there is no existing connection, create it
+	// disconnect current connection first
+	backend.Disconnect()
+
+	backend.log.WithField("address", address).Info("Attempting to connect with device.")
+
+	// There is no existing connection, create it
 	if backend.cancelCurrentConnection == nil {
 		ctx, cancel := context.WithCancel(backend.ctx)
 
@@ -95,20 +106,48 @@ func (backend *DeviceBackend) Connect(address string) {
 			backend.broker.TryPub(data, brokerTopicRx)
 		}
 
-		go listeningLoop(ctx, backend.log, backend.broker.Sub(brokerTopicTx), onReceive)
+		port, err := backend.openSerial(address)
+		if err != nil {
+			return
+		}
+
+		go connectSerial(ctx, backend.log, port, backend.broker.Sub(brokerTopicTx), onReceive)
 
 		backend.cancelCurrentConnection = cancel
 	}
 }
 
 func (backend *DeviceBackend) Disconnect() {
-	backend.cancelCurrentConnection()
-	backend.cancelCurrentConnection = nil
+	if backend.cancelCurrentConnection != nil {
+		backend.cancelCurrentConnection()
+		backend.cancelCurrentConnection = nil
+	}
 }
 
-func (backend *DeviceBackend) RegisterSubscriber() {
-	// simulate current setup - auto-connect without commands
-	backend.Connect("")
+func (backend *DeviceBackend) autoConnect() {
+	// TODO: duration is not used
+	services := backend.Discover(0, backend.ctx)
+
+	// connect to the service to which we can establish a serial connection
+	for service := range services {
+		port, err := backend.openSerial(service.Address)
+		if err == nil {
+			port.Close()
+			backend.Connect(service.Address)
+			return
+		}
+	}
+}
+
+func (backend *DeviceBackend) RegisterSubscriber(req *http.Request) {
+	backend.subscriberCount++
+
+	// backwards compatibility - auto-connect without commands
+	if req.Header.Get("manual-connect") != "1" {
+		if backend.cancelCurrentConnection == nil {
+			backend.autoConnect()
+		}
+	}
 }
 
 // Deregister subscribers and disconnect when none left
@@ -120,15 +159,54 @@ func (backend *DeviceBackend) DeregisterSubscriber() {
 	}
 }
 
-// DeviceBackend stubs
+func portToService(port *enumerator.PortDetails) *service.Service {
+	if isFlexLike(port) {
+		return &service.Service{
+			// TODO: need also metadata
+			Text: service.Text{
+				Serial: port.SerialNumber,
+				Mode:   service.ApplicationMode, // TODO: check how to determine
+			},
+			Address: port.Name,
+			// TODO: not useful for Flex, stub for now
+			ServiceEntry: zeroconf.ServiceEntry{},
+		}
+	}
 
-func (backend *DeviceBackend) Discover(duration int, ctx context.Context, log *logrus.Entry) chan service.Service {
-	// TODO: implement Discover
 	return nil
 }
 
+// TODO: args?
+func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan service.Service {
+	ports, err := enumerator.GetDetailedPortsList()
+	if err != nil {
+		backend.log.WithField("error", err).Info("Could not list serial devices.")
+		return nil
+	}
+
+	// TODO: hack, spawn goroutine or modify Discover interface
+	services := make(chan service.Service, 10)
+
+	for _, port := range ports {
+		// Terminate if we have been cancelled
+		if ctx.Err() != nil {
+			return nil
+		}
+
+		backend.log.WithField("name", port.Name).WithField("vendor", port.VID).Debug("Considering serial port.")
+
+		service := portToService(port)
+		if service != nil {
+			services <- *service
+		}
+
+	}
+	close(services)
+	return services
+}
+
 func (backend *DeviceBackend) Address() *string {
-	return nil
+	return backend.serialName
 }
 
 func (backend *DeviceBackend) IsUpdatingFirmware() bool {
@@ -138,46 +216,6 @@ func (backend *DeviceBackend) IsUpdatingFirmware() bool {
 func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command websocket.UpdateFirmware, send websocket.SendMsg) {
 	// noop
 	return
-}
-
-// internal
-
-// Keep looking for serial devices and connect to them when found, sending signals into the
-// callback.
-func listeningLoop(ctx context.Context, logger *logrus.Entry, tx chan interface{}, onReceive func([]byte)) {
-	for {
-		scanAndConnectSerial(ctx, logger, tx, onReceive)
-
-		// Terminate if we were cancelled
-		if ctx.Err() != nil {
-			return
-		}
-
-		time.Sleep(2 * time.Second)
-	}
-}
-
-// One pass of browsing for serial devices and trying to connect to them turn by turn, first
-// successful connection wins.
-func scanAndConnectSerial(ctx context.Context, logger *logrus.Entry, tx chan interface{}, onReceive func([]byte)) {
-	ports, err := enumerator.GetDetailedPortsList()
-	if err != nil {
-		logger.WithField("error", err).Info("Could not list serial devices.")
-		return
-	}
-
-	for _, port := range ports {
-		// Terminate if we have been cancelled
-		if ctx.Err() != nil {
-			return
-		}
-
-		logger.WithField("name", port.Name).WithField("vendor", port.VID).Debug("Considering serial port.")
-
-		if isFlexLike(port) {
-			connectSerial(ctx, logger, port.Name, tx, onReceive)
-		}
-	}
 }
 
 // Check whether a port looks like a potential Flex device.
@@ -238,9 +276,7 @@ func bitdepthCommandToBytesPerSample(cmd []byte) int {
 	}
 }
 
-// Actually attempt to connect to an individual serial port and pipe its signal into the callback, summarizing
-// package units into a buffer.
-func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string, tx chan interface{}, onReceive func([]byte)) {
+func (backend *DeviceBackend) openSerial(serialName string) (serial.Port, error) {
 	mode := &serial.Mode{
 		BaudRate: 115200,
 		Parity:   serial.NoParity,
@@ -248,24 +284,31 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		StopBits: serial.OneStopBit,
 	}
 
-	logger.WithField("name", serialName).Info("Attempting to connect with serial port.")
+	backend.log.WithField("name", serialName).Info("Attempting to open serial port.")
 	port, err := serial.Open(serialName, mode)
 	if err != nil {
-		logger.WithField("config", mode).WithField("error", err).Info("Failed to open connection to serial port.")
-		return
+		backend.log.WithField("config", mode).WithField("error", err).Info("Failed to open connection to serial port.")
+		return nil, err
 	}
-	port.ResetInputBuffer() // flush any unread data buffered by the OS
 
+	return port, nil
+}
+
+// Read from the serial port and pipe its signal into the callback, summarizing
+// package units into a buffer. Forward commands from client.
+func connectSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
 	readerCtx, readerCtxCancel := context.WithCancel(ctx)
 
 	defer func() {
-		logger.WithField("name", serialName).Info("Disconnecting from serial port.")
+		logger.Info("Disconnecting from serial port.")
 		port.Close()
 		readerCtxCancel()
 	}()
 
+	port.ResetInputBuffer() // flush any unread data buffered by the OS
+
 	// For backwards compatibility, we set 8bit depth by default
-	_, err = port.Write(BITDEPTH_8_CMD)
+	_, err := port.Write(BITDEPTH_8_CMD)
 	if err != nil {
 		logger.WithField("error", err).Info("Failed to set bitdepth of 8.")
 		return

@@ -2,6 +2,7 @@ package senso
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -35,12 +36,12 @@ type DeviceBackend struct {
 	connectionChangeMutex   *sync.Mutex
 }
 
-func (backend *DeviceBackend) RegisterSubscriber() {
+func (backend *DeviceBackend) RegisterSubscriber(r *http.Request) {
 	// noop
 	return
 }
 
-func (backend *DeviceBackend) Discover(duration int, ctx context.Context, log *logrus.Entry) chan service.Service {
+func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan service.Service {
 	discoveryCtx, _ := context.WithTimeout(ctx, time.Duration(duration)*time.Second)
 	return service.Scan(discoveryCtx)
 }

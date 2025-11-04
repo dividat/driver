@@ -24,10 +24,10 @@ type SendMsg struct {
 type DeviceBackend interface {
 	// TODO: will not work for Flex
 	Address() *string
-	Discover(duration int, ctx context.Context, log *logrus.Entry) chan service.Service
+	Discover(duration int, ctx context.Context) chan service.Service
 	Connect(address string)
 	Disconnect()
-	RegisterSubscriber()
+	RegisterSubscriber(r *http.Request)
 	DeregisterSubscriber()
 	ProcessFirmwareUpdateRequest(command UpdateFirmware, send SendMsg)
 	IsUpdatingFirmware() bool
@@ -101,7 +101,7 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rx := handle.Broker.Sub(handle.BrokerRx)
 
 	// TODO: remove once Flex handles commands
-	handle.DeviceBackend.RegisterSubscriber()
+	handle.DeviceBackend.RegisterSubscriber(r)
 
 	// send data from Control and Data channel
 	go rx_data_loop(ctx, rx, sendBinary)
@@ -197,7 +197,7 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 		return nil
 
 	} else if command.Discover != nil {
-		entries := handle.DeviceBackend.Discover(command.Discover.Duration, ctx, log)
+		entries := handle.DeviceBackend.Discover(command.Discover.Duration, ctx)
 
 		// TODO: the async interface makes little sense for Flex
 		go func(entries chan service.Service) {
