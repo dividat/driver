@@ -41,13 +41,24 @@ func (backend *DeviceBackend) RegisterSubscriber(r *http.Request) {
 	return
 }
 
-func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan service.Service {
+func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan websocket.DeviceInfo {
 	discoveryCtx, _ := context.WithTimeout(ctx, time.Duration(duration)*time.Second)
-	return service.Scan(discoveryCtx)
+	// map over the channel to wrap ServiceEntry into DeviceInfo
+	deviceChan := make(chan websocket.DeviceInfo)
+	go func() {
+		for service := range service.Scan(discoveryCtx) {
+			device := websocket.DeviceInfo{TcpDeviceInfo: &service.ServiceEntry}
+			deviceChan <- device
+		}
+		close(deviceChan)
+	}()
+	return deviceChan
 }
 
-func (backend *DeviceBackend) Address() *string {
-	return backend.address
+func (backend *DeviceBackend) GetStatus() websocket.Status {
+	return websocket.Status{
+		Address: backend.address,
+	}
 }
 
 func (backend *DeviceBackend) IsUpdatingFirmware() bool {

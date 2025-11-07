@@ -99,16 +99,51 @@ func (command *Command) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Message that can be sent to Play
+// A broadcast is a Message that it sent to all connected clients
+type Broadcast struct {
+	message Message
+}
+
+func (broadcast *Broadcast) MarshalJSON() ([]byte, error) {
+	temp := struct {
+		Type    string  `json:"type"`
+		Message Message `json:"message"`
+	}{}
+	temp.Type = "broadcast"
+	temp.Message = broadcast.message
+
+	return json.Marshal(&temp)
+}
+
+// Driver Message sent to Play in response to a Command (hence, to a single client)
 type Message struct {
 	*Status
-	Discovered            *zeroconf.ServiceEntry
+	Discovered            *DeviceInfo
 	FirmwareUpdateMessage *FirmwareUpdateMessage
+}
+
+type DeviceInfo struct {
+	TcpDeviceInfo *zeroconf.ServiceEntry `json:"tcpDevice"`
+	UsbDeviceInfo *UsbDeviceInfo         `json:"usbDevice"`
+}
+
+type UsbDeviceInfo struct {
+	Path string `json:"path"`
+
+	IdVendor  uint16 `json:"idVendor"`
+	IdProduct uint16 `json:"idProduct"`
+
+	SerialNumber string `json:"serialNumber"`
+	Manufacturer string `json:"manufacturer"`
+	Product      string `json:"product"`
 }
 
 // Status is a message containing status information
 type Status struct {
+	// ip for Senso, /dev/* path for Flex
 	Address *string
+	// optional, currently only used in Flex
+	DeviceInfo *DeviceInfo
 }
 
 type FirmwareUpdateMessage struct {
@@ -120,24 +155,35 @@ type FirmwareUpdateMessage struct {
 // MarshalJSON ipmlements JSON encoder for messages
 func (message *Message) MarshalJSON() ([]byte, error) {
 	if message.Status != nil {
-		return json.Marshal(&struct {
-			Type    string  `json:"type"`
-			Address *string `json:"address"`
+		status := struct {
+			Type       string      `json:"type"`
+			Address    *string     `json:"address"`
+			DeviceInfo *DeviceInfo `json:"deviceInfo"`
 		}{
-			Type:    "Status",
-			Address: message.Status.Address,
-		})
+			Type:       "Status",
+			Address:    message.Status.Address,
+			DeviceInfo: message.Status.DeviceInfo,
+		}
+		return json.Marshal(&status)
 
 	} else if message.Discovered != nil {
-		return json.Marshal(&struct {
-			Type         string                 `json:"type"`
+		serviceEntry := message.Discovered.TcpDeviceInfo
+		msg := struct {
+			Type string `json:"type"`
+			// Senso only
 			ServiceEntry *zeroconf.ServiceEntry `json:"service"`
 			IP           []net.IP               `json:"ip"`
+			// Flex only
+			UsbDevice *UsbDeviceInfo `json:"usbDevice"`
 		}{
 			Type:         "Discovered",
-			ServiceEntry: message.Discovered,
-			IP:           append(message.Discovered.AddrIPv4, message.Discovered.AddrIPv6...),
-		})
+			ServiceEntry: serviceEntry,
+			UsbDevice:    message.Discovered.UsbDeviceInfo,
+		}
+		if serviceEntry != nil {
+			msg.IP = append(serviceEntry.AddrIPv4, serviceEntry.AddrIPv6...)
+		}
+		return json.Marshal(&msg)
 
 	} else if message.FirmwareUpdateMessage != nil {
 		fwUpdate := struct {

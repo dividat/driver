@@ -11,8 +11,6 @@ import (
 	"github.com/cskr/pubsub"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
-
-	"github.com/dividat/driver/src/dividat-driver/service"
 )
 
 type SendMsg struct {
@@ -22,9 +20,8 @@ type SendMsg struct {
 }
 
 type DeviceBackend interface {
-	// TODO: will not work for Flex
-	Address() *string
-	Discover(duration int, ctx context.Context) chan service.Service
+	GetStatus() Status
+	Discover(duration int, ctx context.Context) chan DeviceInfo
 	Connect(address string)
 	Disconnect()
 	RegisterSubscriber(r *http.Request)
@@ -37,6 +34,8 @@ type Handle struct {
 	Broker   *pubsub.PubSub
 	BrokerRx string
 	BrokerTx string
+	// Flex-only for now
+	BrokerRxBroadcast *string
 
 	Log *logrus.Entry
 
@@ -97,19 +96,29 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	// Create channels with data received from device
-	rx := handle.Broker.Sub(handle.BrokerRx)
-
 	// TODO: remove once Flex handles commands
 	handle.DeviceBackend.RegisterSubscriber(r)
 
-	// send data from Control and Data channel
+	// Create channels with data received from device
+	rx := handle.Broker.Sub(handle.BrokerRx)
+
+	// forward data and controls from device to client
 	go rx_data_loop(ctx, rx, sendBinary)
+
+	// forward DriverBackend broadcast events to client
+	var rxBroadcast chan interface{}
+	if handle.BrokerRxBroadcast != nil {
+		rxBroadcast = handle.Broker.Sub(*handle.BrokerRxBroadcast)
+		go rx_broadcast_loop(ctx, rxBroadcast, sendMessage)
+	}
 
 	// Helper function to close the connection
 	close := func() {
 		// Unsubscribe from broker
 		handle.Broker.Unsub(rx)
+		if rxBroadcast != nil {
+			handle.Broker.Unsub(rxBroadcast)
+		}
 
 		// TODO: remove once Flex handles commands
 		handle.DeviceBackend.DeregisterSubscriber()
@@ -177,11 +186,8 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, command Command, sendMessage func(Message) error) error {
 
 	if command.GetStatus != nil {
-		// TODO: think about a general Status interface
-		var message Message
-
-		message.Status = &Status{Address: handle.DeviceBackend.Address()}
-
+		status := handle.DeviceBackend.GetStatus()
+		message := Message{Status: &status}
 		err := sendMessage(message)
 
 		if err != nil {
@@ -200,12 +206,12 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 		entries := handle.DeviceBackend.Discover(command.Discover.Duration, ctx)
 
 		// TODO: the async interface makes little sense for Flex
-		go func(entries chan service.Service) {
+		go func(entries chan DeviceInfo) {
 			for entry := range entries {
 				log.WithField("service", entry).Debug("Discovered service.")
 
 				var message Message
-				message.Discovered = &entry.ServiceEntry
+				message.Discovered = &entry
 
 				err := sendMessage(message)
 				if err != nil {
@@ -249,6 +255,27 @@ func firmwareUpdateProgress(msg string) Message {
 
 func firmwareUpdateMessage(msg FirmwareUpdateMessage) Message {
 	return Message{FirmwareUpdateMessage: &msg}
+}
+
+// rx_broadcast_loop reads events from DeviceBackend and forwards them to the WebSocket
+func rx_broadcast_loop(ctx context.Context, rx chan interface{}, send func(Message) error) {
+	var err error
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case msg := <-rx:
+			data, ok := msg.(Message)
+			if ok {
+				err = send(data)
+			}
+		}
+
+		if err != nil {
+			return
+		}
+	}
 }
 
 // rx_data_loop reads data from device and forwards it up the WebSocket
