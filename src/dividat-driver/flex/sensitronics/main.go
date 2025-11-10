@@ -14,9 +14,8 @@ import (
 // Serial communication
 
 const (
-	DRIVER_PROTOCOL_VERSION = 0x02
-	HEADER_START_MARKER     = 0xFF
-	HEADER_TYPE_TERMINATOR  = 0xA // newline
+	HEADER_START_MARKER    = 0xFF
+	HEADER_TYPE_TERMINATOR = 0xA // newline
 )
 
 type SensitronicsReader struct{}
