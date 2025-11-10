@@ -245,7 +245,7 @@ func (backend *DeviceBackend) RegisterSubscriber(req *http.Request) {
 func (backend *DeviceBackend) DeregisterSubscriber() {
 	backend.subscriberCount--
 
-	if backend.subscriberCount == 0 && backend.cancelCurrentConnection != nil {
+	if backend.subscriberCount == 0 {
 		backend.disableAutoConnect()
 		backend.Disconnect()
 	}
