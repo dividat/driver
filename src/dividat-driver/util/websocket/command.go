@@ -132,6 +132,7 @@ type UsbDeviceInfo struct {
 
 	IdVendor  uint16 `json:"idVendor"`
 	IdProduct uint16 `json:"idProduct"`
+	BcdDevice uint16 `json:"bcdDevice"`
 
 	SerialNumber string `json:"serialNumber"`
 	Manufacturer string `json:"manufacturer"`

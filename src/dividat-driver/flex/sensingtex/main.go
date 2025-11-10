@@ -71,6 +71,7 @@ func (SensingTexReader) ReadFromSerial(ctx context.Context, cancel context.Cance
 	port.ResetInputBuffer() // flush any unread data buffered by the OS
 
 	// For backwards compatibility, we set 8bit depth by default
+	// TODO: use UsbDeviceInfo.BcdDevice to identify V4 vs V5 and get rid of this
 	_, err := port.Write(BITDEPTH_8_CMD)
 	if err != nil {
 		logger.WithField("error", err).Info("Failed to set bitdepth of 8.")

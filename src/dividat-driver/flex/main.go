@@ -290,11 +290,16 @@ func portDetailsToDeviceInfo(port enumerator.PortDetails) (*websocket.UsbDeviceI
 	if err != nil {
 		return nil, err
 	}
+	bcdDevice, err := strconv.ParseUint(port.BcdDevice, 16, 16) // hex, uint16
+	if err != nil {
+		return nil, err
+	}
 
 	deviceInfo := websocket.UsbDeviceInfo{
 		Path:         port.Name,
 		IdVendor:     uint16(idVendor),
 		IdProduct:    uint16(idProduct),
+		BcdDevice:    uint16(bcdDevice),
 		SerialNumber: port.SerialNumber,
 		Manufacturer: port.Manufacturer,
 		Product:      port.Product,
