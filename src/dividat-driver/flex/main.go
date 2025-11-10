@@ -107,7 +107,7 @@ func (backend *DeviceBackend) broadcastStatusUpdate() {
 type SerialReader interface {
 	// Read from the serial port and pipe its signal into the callback, summarizing
 	// package units into a buffer. Forward commands from client.
-	ReadFromSerial(ctx context.Context, cancel context.CancelFunc, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte))
+	ReadFromSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte))
 }
 
 func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
@@ -152,9 +152,11 @@ func (backend *DeviceBackend) connectInternal(device websocket.UsbDeviceInfo) er
 
 	backend.currentDevice = &device
 
+	// TODO: replace this with context.AfterFunc
 	backend.cancelCurrentConnection = func() {
 		backend.log.Debug("Cancelling the current connection.")
 		cancel()
+		port.Close()
 		backend.currentDevice = nil
 		backend.cancelCurrentConnection = nil
 		backend.broadcastStatusUpdate()
@@ -163,9 +165,11 @@ func (backend *DeviceBackend) connectInternal(device websocket.UsbDeviceInfo) er
 
 	tx := backend.broker.Sub(brokerTopicTx)
 
-	// TODO: seems to work, but look at ctx/cancel a bit more carefully, at
-	// a minimum it feels like some parts are redundant
-	go reader.ReadFromSerial(ctx, backend.cancelCurrentConnection, backend.log, port, tx, onReceive)
+	go func() {
+		defer backend.cancelCurrentConnection()
+		reader.ReadFromSerial(ctx, backend.log, port, tx, onReceive)
+	}()
+
 	return nil
 }
 

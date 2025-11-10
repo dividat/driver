@@ -58,15 +58,8 @@ func bitdepthCommandToBytesPerSample(cmd []byte) int {
 
 type SensingTexReader struct{}
 
-func (SensingTexReader) ReadFromSerial(ctx context.Context, cancel context.CancelFunc, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
+func (SensingTexReader) ReadFromSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
 	readerCtx, readerCtxCancel := context.WithCancel(ctx)
-
-	defer func() {
-		logger.Info("Disconnecting from serial port.")
-		port.Close()
-		readerCtxCancel()
-		cancel()
-	}()
 
 	port.ResetInputBuffer() // flush any unread data buffered by the OS
 

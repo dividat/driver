@@ -20,17 +20,10 @@ const (
 
 type SensitronicsReader struct{}
 
-func (SensitronicsReader) ReadFromSerial(ctx context.Context, cancel context.CancelFunc, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
+func (SensitronicsReader) ReadFromSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
+	readerCtx := context.WithoutCancel(ctx)
+
 	port.ResetInputBuffer() // flush any unread data buffered by the OS
-
-	readerCtx, readerCtxCancel := context.WithCancel(ctx)
-
-	defer func() {
-		logger.Info("Disconnecting from serial port.")
-		port.Close()
-		readerCtxCancel()
-		cancel()
-	}()
 
 	// Channel to receive ack that reader is done
 	readerDoneChan := make(chan struct{})
