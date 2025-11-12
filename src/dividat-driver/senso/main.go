@@ -95,7 +95,7 @@ func New(ctx context.Context, log *logrus.Entry) *Handle {
 	return &handle
 }
 
-func (backend *DeviceBackend) DeregisterSubscriber() {
+func (backend *DeviceBackend) DeregisterSubscriber(req *http.Request) {
 	// noop
 }
 

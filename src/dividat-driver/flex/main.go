@@ -16,16 +16,14 @@ The functionality of this module is as follows:
 import (
 	"context"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/cskr/pubsub"
 	"github.com/sirupsen/logrus"
 	"go.bug.st/serial"
-	"go.bug.st/serial/enumerator"
 
+	"github.com/dividat/driver/src/dividat-driver/flex/enumerator"
 	"github.com/dividat/driver/src/dividat-driver/flex/sensingtex"
 	"github.com/dividat/driver/src/dividat-driver/flex/sensitronics"
 	"github.com/dividat/driver/src/dividat-driver/util"
@@ -52,6 +50,8 @@ type DeviceBackend struct {
 
 	currentDevice *websocket.UsbDeviceInfo
 
+	enumerator *enumerator.DeviceEnumerator
+
 	broker *pubsub.PubSub
 
 	cancelCurrentConnection context.CancelFunc
@@ -63,10 +63,12 @@ type DeviceBackend struct {
 }
 
 // New returns an initialized handler
-func New(ctx context.Context, log *logrus.Entry) *Handle {
+func New(ctx context.Context, log *logrus.Entry, enumerator *enumerator.DeviceEnumerator) *Handle {
 	backend := DeviceBackend{
 		ctx: ctx,
 		log: log,
+
+		enumerator: enumerator,
 
 		broker: pubsub.New(32),
 
@@ -179,7 +181,7 @@ func (backend *DeviceBackend) connectToFirstIfNotConnected() {
 		return
 	}
 
-	devices := backend.listMatchingSerialDevices()
+	devices := backend.enumerator.ListMatchingDevices()
 
 	// try devices until the first success
 	for _, device := range devices {
@@ -242,73 +244,13 @@ func (backend *DeviceBackend) RegisterSubscriber(req *http.Request) {
 }
 
 // Deregister subscribers and disconnect when none left
-func (backend *DeviceBackend) DeregisterSubscriber() {
+func (backend *DeviceBackend) DeregisterSubscriber(req *http.Request) {
 	backend.subscriberCount--
 
 	if backend.subscriberCount == 0 {
 		backend.disableAutoConnect()
 		backend.Disconnect()
 	}
-}
-
-// Check whether a port looks like a potential Flex device.
-//
-// Vendor IDs:
-//
-//	16C0 - Van Ooijen Technische Informatica (Teensy)
-func isFlexLike(port enumerator.PortDetails) bool {
-	vendorId := strings.ToUpper(port.VID)
-
-	return vendorId == "16C0"
-}
-
-func (backend *DeviceBackend) listMatchingSerialDevices() []websocket.UsbDeviceInfo {
-	ports, err := enumerator.GetDetailedPortsList()
-	if err != nil {
-		backend.log.WithField("error", err).Info("Could not list serial devices.")
-		return nil
-	}
-	var matching []websocket.UsbDeviceInfo
-	for _, port := range ports {
-		backend.log.WithField("name", port.Name).WithField("vendor", port.VID).Debug("Considering serial port.")
-
-		if isFlexLike(*port) {
-			device, err := portDetailsToDeviceInfo(*port)
-			if err != nil {
-				backend.log.WithField("port", port).Error("Failed to convert serial port details to device info!")
-			} else {
-				backend.log.WithField("name", port.Name).Debug("Serial port matches a Flex device.")
-				matching = append(matching, *device)
-			}
-		}
-	}
-	return matching
-}
-
-func portDetailsToDeviceInfo(port enumerator.PortDetails) (*websocket.UsbDeviceInfo, error) {
-	idVendor, err := strconv.ParseUint(port.VID, 16, 16) // hex, uint16
-	if err != nil {
-		return nil, err
-	}
-	idProduct, err := strconv.ParseUint(port.PID, 16, 16) // hex, uint16
-	if err != nil {
-		return nil, err
-	}
-	bcdDevice, err := strconv.ParseUint(port.BcdDevice, 16, 16) // hex, uint16
-	if err != nil {
-		return nil, err
-	}
-
-	deviceInfo := websocket.UsbDeviceInfo{
-		Path:         port.Name,
-		IdVendor:     uint16(idVendor),
-		IdProduct:    uint16(idProduct),
-		BcdDevice:    uint16(bcdDevice),
-		SerialNumber: port.SerialNumber,
-		Manufacturer: port.Manufacturer,
-		Product:      port.Product,
-	}
-	return &deviceInfo, nil
 }
 
 func (backend *DeviceBackend) GetStatus() websocket.Status {
@@ -324,7 +266,7 @@ func (backend *DeviceBackend) GetStatus() websocket.Status {
 // NOTE: The remaining Driver commands are not currently used in Play for Flex
 
 func (backend *DeviceBackend) lookupDeviceInfo(portName string) *websocket.UsbDeviceInfo {
-	devices := backend.listMatchingSerialDevices()
+	devices := backend.enumerator.ListMatchingDevices()
 	for _, device := range devices {
 		if device.Path == portName {
 			return &device
@@ -355,7 +297,7 @@ func (backend *DeviceBackend) Disconnect() {
 
 // Currently not used in Play
 func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan websocket.DeviceInfo {
-	matching := backend.listMatchingSerialDevices()
+	matching := backend.enumerator.ListMatchingDevices()
 	devices := make(chan websocket.DeviceInfo)
 
 	go func(usbDevices []websocket.UsbDeviceInfo) {

@@ -25,7 +25,7 @@ type DeviceBackend interface {
 	Connect(address string)
 	Disconnect()
 	RegisterSubscriber(r *http.Request)
-	DeregisterSubscriber()
+	DeregisterSubscriber(r *http.Request)
 	ProcessFirmwareUpdateRequest(command UpdateFirmware, send SendMsg)
 	IsUpdatingFirmware() bool
 }
@@ -96,7 +96,6 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	// TODO: remove once Flex handles commands
 	handle.DeviceBackend.RegisterSubscriber(r)
 
 	// Create channels with data received from device
@@ -120,8 +119,7 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			handle.Broker.Unsub(rxBroadcast)
 		}
 
-		// TODO: remove once Flex handles commands
-		handle.DeviceBackend.DeregisterSubscriber()
+		handle.DeviceBackend.DeregisterSubscriber(r)
 
 		// Cancel the context
 		cancel()
