@@ -44,13 +44,16 @@ func (p *program) Start(s service.Service) error {
 	// Command-line flags
 	var permissibleOrigins stringList
 	flag.Var(&permissibleOrigins, "permissible-origin", "Permissible origin to make requests to the driver's HTTP endpoints, may be repeated. Default is a list of common Dividat origins.")
+
+	testMode := flag.Bool("test-mode", false, "Run in test mode. Enables mock serial (Flex) device registration.")
 	flag.Parse()
+
 	if len(permissibleOrigins) == 0 {
 		permissibleOrigins = defaultOrigins
 	}
 
 	// Start server
-	p.close = server.Start(logger, permissibleOrigins)
+	p.close = server.Start(logger, permissibleOrigins, *testMode)
 	return nil
 }
 

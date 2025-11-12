@@ -14,21 +14,37 @@ import (
 type DeviceEnumerator struct {
 	ctx                   context.Context
 	log                   *logrus.Entry
+	testMode              bool
+	registeredMockDevices map[MockDeviceId]*serial_enumerator.PortDetails
 }
 
-func New(ctx context.Context, log *logrus.Entry) *DeviceEnumerator {
+func New(ctx context.Context, log *logrus.Entry, testMode bool) *DeviceEnumerator {
+	if testMode {
+		log.Debug("Running in test mode!")
+	}
 	return &DeviceEnumerator{
 		ctx:                   ctx,
 		log:                   log,
+		testMode:              testMode,
+		registeredMockDevices: make(map[MockDeviceId]*serial_enumerator.PortDetails),
 	}
 }
 
 func (handle *DeviceEnumerator) getSerialPortList() ([]*serial_enumerator.PortDetails, error) {
+	// run even in testMode for a pseudo-test that enumeration works at all
 	ports, err := serial_enumerator.GetDetailedPortsList()
 	if err != nil {
 		return nil, err
 	}
-    return ports, nil
+	if handle.testMode {
+		mockDevices := handle.listMockDevices()
+		// in testMode, return ONLY the test devices to ensure tests work
+		// consistently regardless of whether an actual Flex device is plugged in
+		handle.log.WithField("n", len(mockDevices)).Debug("Returning mock devices")
+		return mockDevices, nil
+	} else {
+		return ports, nil
+	}
 }
 
 func (handle *DeviceEnumerator) ListMatchingDevices() []websocket.UsbDeviceInfo {

@@ -23,7 +23,7 @@ var version string
 const serverPort = "8382"
 
 // Start the driver server
-func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
+func Start(logger *logrus.Logger, origins []string, testMode bool) context.CancelFunc {
 	// Log Server
 	logServer := logging.NewLogServer()
 	logger.AddHook(logServer)
@@ -57,7 +57,9 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 	http.Handle("/senso", originMiddleware(origins, baseLog, sensoHandle))
 
 	// Setup Flex reader
-	flexEnumerator := flex_enumerator.New(ctx, baseLog.WithField("package", "flex.enumerator"))
+	flexEnumerator := flex_enumerator.New(ctx, baseLog.WithField("package", "flex.enumerator"), testMode)
+	http.Handle("/flex/mock", http.RedirectHandler("/flex/mock/", http.StatusMovedPermanently))
+	http.Handle("/flex/mock/", http.StripPrefix("/flex/mock", flexEnumerator))
 	flexHandle := flex.New(ctx, baseLog.WithField("package", "flex"), flexEnumerator)
 	http.Handle("/flex", originMiddleware(origins, baseLog, flexHandle))
 
