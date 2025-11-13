@@ -19,9 +19,6 @@ type DeviceEnumerator struct {
 }
 
 func New(ctx context.Context, log *logrus.Entry, testMode bool) *DeviceEnumerator {
-	if testMode {
-		log.Debug("Running in test mode!")
-	}
 	return &DeviceEnumerator{
 		ctx:                   ctx,
 		log:                   log,

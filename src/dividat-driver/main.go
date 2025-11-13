@@ -52,6 +52,10 @@ func (p *program) Start(s service.Service) error {
 		permissibleOrigins = defaultOrigins
 	}
 
+	if *testMode {
+		logger.Info("Running in test mode!")
+	}
+
 	// Start server
 	p.close = server.Start(logger, permissibleOrigins, *testMode)
 	return nil
