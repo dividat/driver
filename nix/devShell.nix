@@ -6,8 +6,9 @@ mkShell
     go
     gcc
 
-    # node for tests
+    # test dependencies
     nodejs
+    socat
 
     # Required for building go dependencies
     autoconf

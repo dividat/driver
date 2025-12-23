@@ -11,6 +11,10 @@ describe('Senso', () => {
   require('./senso')
 })
 
-describe('RFID', () => {
-  require('./rfid')
+describe("RFID", () => {
+  require("./rfid")
+})
+
+describe("Flex", () => {
+  require("./flex")
 })
