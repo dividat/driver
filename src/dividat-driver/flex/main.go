@@ -98,7 +98,8 @@ func New(ctx context.Context, log *logrus.Entry, enumerator *enumerator.DeviceEn
 }
 
 func (backend *DeviceBackend) broadcastMessage(msg websocket.Message) {
-	backend.broker.TryPub(msg, brokerTopicRxBroadcast)
+	broadcast := websocket.Broadcast{Message: msg}
+	backend.broker.TryPub(broadcast, brokerTopicRxBroadcast)
 }
 
 func (backend *DeviceBackend) broadcastStatusUpdate() {

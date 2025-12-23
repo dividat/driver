@@ -81,11 +81,11 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	// send messgae up the WebSocket
-	sendMessage := func(message Message) error {
+	// send JSON data up the WebSocket
+	sendGeneric := func(message []byte) error {
 		writeMutex.Lock()
 		conn.SetWriteDeadline(time.Now().Add(50 * time.Millisecond))
-		err := conn.WriteJSON(&message)
+		err := conn.WriteMessage(websocket.TextMessage, message)
 		writeMutex.Unlock()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
@@ -94,6 +94,22 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		return nil
+	}
+
+	sendMessage := func(message Message) error {
+		msg, err := message.MarshalJSON()
+		if err != nil {
+			return err
+		}
+		return sendGeneric(msg)
+	}
+
+	sendBroadcast := func(broadcast Broadcast) error {
+		msg, err := broadcast.MarshalJSON()
+		if err != nil {
+			return err
+		}
+		return sendGeneric(msg)
 	}
 
 	handle.DeviceBackend.RegisterSubscriber(r)
@@ -108,7 +124,7 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var rxBroadcast chan interface{}
 	if handle.BrokerRxBroadcast != nil {
 		rxBroadcast = handle.Broker.Sub(*handle.BrokerRxBroadcast)
-		go rx_broadcast_loop(ctx, rxBroadcast, sendMessage)
+		go rx_broadcast_loop(ctx, rxBroadcast, sendBroadcast)
 	}
 
 	// Helper function to close the connection
@@ -256,7 +272,7 @@ func firmwareUpdateMessage(msg FirmwareUpdateMessage) Message {
 }
 
 // rx_broadcast_loop reads events from DeviceBackend and forwards them to the WebSocket
-func rx_broadcast_loop(ctx context.Context, rx chan interface{}, send func(Message) error) {
+func rx_broadcast_loop(ctx context.Context, rx chan interface{}, send func(Broadcast) error) {
 	var err error
 	for {
 		select {
@@ -264,7 +280,7 @@ func rx_broadcast_loop(ctx context.Context, rx chan interface{}, send func(Messa
 			return
 
 		case msg := <-rx:
-			data, ok := msg.(Message)
+			data, ok := msg.(Broadcast)
 			if ok {
 				err = send(data)
 			}

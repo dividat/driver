@@ -101,7 +101,7 @@ func (command *Command) UnmarshalJSON(data []byte) error {
 
 // A broadcast is a Message that it sent to all connected clients
 type Broadcast struct {
-	message Message
+	Message Message
 }
 
 func (broadcast *Broadcast) MarshalJSON() ([]byte, error) {
@@ -109,8 +109,8 @@ func (broadcast *Broadcast) MarshalJSON() ([]byte, error) {
 		Type    string  `json:"type"`
 		Message Message `json:"message"`
 	}{}
-	temp.Type = "broadcast"
-	temp.Message = broadcast.message
+	temp.Type = "Broadcast"
+	temp.Message = broadcast.Message
 
 	return json.Marshal(&temp)
 }
