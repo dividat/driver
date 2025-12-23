@@ -24,6 +24,7 @@ import (
 	"go.bug.st/serial"
 
 	"github.com/dividat/driver/src/dividat-driver/flex/enumerator"
+	"github.com/dividat/driver/src/dividat-driver/flex/passthru"
 	"github.com/dividat/driver/src/dividat-driver/flex/sensingtex"
 	"github.com/dividat/driver/src/dividat-driver/flex/sensitronics"
 	"github.com/dividat/driver/src/dividat-driver/util"
@@ -118,6 +119,8 @@ func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
 		return &sensingtex.SensingTexReader{}
 	} else if deviceInfo.Manufacturer == "Sensitronics" {
 		return &sensitronics.SensitronicsReader{}
+	} else if deviceInfo.Product == "PASSTHRU" {
+		return &passthru.PassthruReader{}
 	}
 	return nil
 }
