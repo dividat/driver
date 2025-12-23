@@ -238,6 +238,8 @@ func (backend *DeviceBackend) RegisterSubscriber(req *http.Request) {
 
 	// disables the background scan-and-autoconnect
 	// TODO: does last-client-wins logic make sense?
+	// TODO: browser API does not provide a way to set custom headers,
+	// so this needs to be read from Sec-WebSocket-Protocol or from the cookie
 	if req.Header.Get("manual-connect") == "1" {
 		backend.disableAutoConnect()
 	} else {
