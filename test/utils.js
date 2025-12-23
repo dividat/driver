@@ -15,9 +15,9 @@ module.exports = {
     })
   },
 
-  connectWS: function (url, opts) {
+  connectWS: function (url, opts, protocols) {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(url, opts)
+      const ws = new WebSocket(url, protocols, opts)
       ws.on('open', () => {
         ws.removeAllListeners()
         resolve(ws)

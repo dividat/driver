@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cskr/pubsub"
+	gorilla "github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 	"go.bug.st/serial"
 
@@ -233,17 +234,27 @@ func (backend *DeviceBackend) backgroundScan(ctx context.Context) {
 
 }
 
+// Check if client has requested manual-connect via a Sec-WebSocket-Protocol
+func wantsManualConnect(req *http.Request) bool {
+	for _, protocol := range gorilla.Subprotocols(req) {
+		if protocol == "manual-connect" {
+			return true
+		}
+	}
+	return false
+}
+
 func (backend *DeviceBackend) RegisterSubscriber(req *http.Request) {
 	backend.subscriberCount++
 
-	// disables the background scan-and-autoconnect
-	// TODO: does last-client-wins logic make sense?
-	// TODO: browser API does not provide a way to set custom headers,
-	// so this needs to be read from Sec-WebSocket-Protocol or from the cookie
-	if req.Header.Get("manual-connect") == "1" {
+	// If a client has specified manual-connect in WebSocket sub-protocols,
+	// we disable auto-connect globally. Last-client-wins, meaning that
+	// if another client connects later without `manual-connect`, then
+	// auto-connect will be re-enabled.
+	if wantsManualConnect(req) {
 		backend.disableAutoConnect()
 	} else {
-		// backwards compat: if header is not set, auto-connect
+		// backwards compatible setup: auto-connect by default
 		backend.connectToFirstIfNotConnected()
 		backend.enableAutoConnect()
 	}

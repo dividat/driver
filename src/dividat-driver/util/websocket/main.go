@@ -317,6 +317,7 @@ func rx_data_loop(ctx context.Context, rx chan interface{}, send func([]byte) er
 var webSocketUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	Subprotocols:    []string{"manual-connect"}, // for Flex
 	CheckOrigin: func(r *http.Request) bool {
 		// Check is performed by top-level HTTP middleware, and not repeated here.
 		return true
