@@ -8,26 +8,26 @@ function expectMessageType(ws, msgType) {
     return expectEvent(ws, "message", (s) => {
       const msg = JSON.parse(s);
       return msg.type === msgType;
-    });
+    }).then(JSON.parse);
 };
 
 function sendCmd(ws, cmd) {
     return ws.send(JSON.stringify(cmd));
 }
 
-async function expectCmdReply(ws, cmd, replyType, replyCheck) {
+function expectCmdReply(ws, cmd, replyType, replyCheck) {
     const replyPromise = expectMessageType(ws, replyType);
     sendCmd(ws, cmd);
 
-    return replyPromise.then(JSON.parse).then(replyCheck)
+    return replyPromise.then(replyCheck)
 }
 
-async function expectStatusReply(ws, replyCheck) {
+function expectStatusReply(ws, replyCheck) {
     return expectCmdReply(ws, { type: "GetStatus" }, "Status", replyCheck);
 }
 
-async function expectBroadcast(ws, check) {
-    return expectMessageType(ws, "Broadcast").then(JSON.parse).then(check)
+function expectBroadcast(ws, check) {
+    return expectMessageType(ws, "Broadcast").then(check)
 }
 
 describe("Basic Flex functionality with Passthru device", () => {
@@ -139,6 +139,54 @@ describe("Basic Flex functionality with Passthru device", () => {
 
     await virtualDevice.serialPort.close();
     expect(await disconnectBroadcast1).to.deep.equal(await disconnectBroadcast2);
+  });
+
+
+  it("MANUAL-CONNECT: can discover and list devices", async function () {
+    const virtualDevice1 = virtualDevice; // set up in beforeEach
+
+    // Create virtual Flex device with specified USB details
+    const virtualDevice2 = new VirtualDevice({
+      idVendor: "16c0",
+      product: "NEWDEVICE",
+    });
+    await virtualDevice2.initialize();
+
+    // Connect flex endpoint client
+    const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
+
+    const discovered = new Promise((resolve, reject) => {
+        const values = [];
+        flexWS.on("message", (a) => {
+            const msg = JSON.parse(a);
+            expect(msg.type).to.equal("Discovered")
+            values.push(msg);
+            if (values.length === 2) {
+                resolve(values);
+            }
+        });
+    });
+
+    await virtualDevice1.registerWithDriver("http://127.0.0.1:8382");
+    await virtualDevice2.registerWithDriver("http://127.0.0.1:8382");
+
+    sendCmd(flexWS, {
+      type: 'Discover',
+      duration: 5
+    });
+
+    const devices = await discovered;
+
+    expect(devices).to.have.length(2);
+
+    const receivedFields = devices.map((d) => {
+        return { path: d.usbDevice.path, product: d.usbDevice.product }
+    });
+    const actualFields = [virtualDevice1, virtualDevice2].map((d) => {
+        return { path: d.address, product: d.product }
+    });
+    expect(receivedFields).to.have.deep.members(actualFields);
+
   });
 
   it("AUTO-CONNECT: can replay recording and receive data via WebSocket", async function () {

@@ -324,6 +324,7 @@ func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan w
 				break
 			}
 
+			usbDevice := usbDevice // copy to ref-by-value, yay golang
 			device := websocket.DeviceInfo{UsbDeviceInfo: &usbDevice}
 
 			devices <- device
