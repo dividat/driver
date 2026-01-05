@@ -4,6 +4,32 @@ const expect = require("chai").expect;
 const VirtualDevice = require("./mock/VirtualDevice");
 const path = require("path");
 
+function expectMessageType(ws, msgType) {
+    return expectEvent(ws, "message", (s) => {
+      const msg = JSON.parse(s);
+      return msg.type === msgType;
+    });
+};
+
+function sendCmd(ws, cmd) {
+    return ws.send(JSON.stringify(cmd));
+}
+
+async function expectCmdReply(ws, cmd, replyType, replyCheck) {
+    const replyPromise = expectMessageType(ws, replyType);
+    sendCmd(ws, cmd);
+
+    return replyPromise.then(JSON.parse).then(replyCheck)
+}
+
+async function expectStatusReply(ws, replyCheck) {
+    return expectCmdReply(ws, { type: "GetStatus" }, "Status", replyCheck);
+}
+
+async function expectBroadcast(ws, check) {
+    return expectMessageType(ws, "Broadcast").then(JSON.parse).then(check)
+}
+
 describe("Basic Flex functionality with Passthru device", () => {
   var driver;
   var virtualDevice;
@@ -28,6 +54,7 @@ describe("Basic Flex functionality with Passthru device", () => {
     await virtualDevice.initialize();
   });
 
+
   afterEach(async () => {
     driver.kill();
     if (virtualDevice && virtualDevice.serialPort) {
@@ -47,34 +74,22 @@ describe("Basic Flex functionality with Passthru device", () => {
     // Connect flex endpoint client
     const flexWS = await connectWS("ws://127.0.0.1:8382/flex", { }, [ "manual-connect" ]);
 
-    function expectMessageType(msgType) {
-        return expectEvent(flexWS, "message", (s) => {
-          const msg = JSON.parse(s);
-          return msg.type === msgType;
-        });
-    };
-
     // Drive should not auto-connect since manual-connect is specified
-    const statusAfterRegistrationP = expectMessageType("Status");
-    flexWS.send(JSON.stringify({ type: "GetStatus" }));
-    const statusAfterRegistration = JSON.parse(await statusAfterRegistrationP);
+    await expectStatusReply(flexWS, (statusAfterRegistration) => {
+        expect(statusAfterRegistration.address).to.be.null;
+        expect(statusAfterRegistration.deviceInfo).to.be.null;
+    });
 
-    expect(statusAfterRegistration.address).to.be.null;
-    expect(statusAfterRegistration.deviceInfo).to.be.null;
-
-
-    const statusAfterConnectP = expectMessageType("Status");
     // Send command to connect to the virtual device
-    const cmd = JSON.stringify({
+    const cmd = {
       type: "Connect",
       address: virtualDevice.address,
+    };
+    sendCmd(flexWS, cmd);
+    await expectStatusReply(flexWS, (statusAfterConnect) => {
+        expect(statusAfterConnect.address).to.be.equal(virtualDevice.address);
+        expect(statusAfterConnect.deviceInfo.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
     });
-    flexWS.send(cmd);
-    flexWS.send(JSON.stringify({ type: "GetStatus" }));
-    const statusAfterConnect = JSON.parse(await statusAfterConnectP);
-
-    expect(statusAfterConnect.address).to.be.equal(virtualDevice.address);
-    expect(statusAfterConnect.deviceInfo.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
   });
 
   it("AUTO-CONNECT: get broadcasts about devices and auto-connects to them", async function () {
@@ -83,49 +98,40 @@ describe("Basic Flex functionality with Passthru device", () => {
     // Connect flex endpoint client
     const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
 
-    function expectMessageType(msgType) {
-        return expectEvent(flexWS, "message", (s) => {
-          const msg = JSON.parse(s);
-          return msg.type === msgType;
-        });
-    };
-
     // Initial status is null
-    const statusInitialP = expectMessageType("Status");
-    flexWS.send(JSON.stringify({ type: "GetStatus" }));
-    const statusInitial = JSON.parse(await statusInitialP);
-
-    expect(statusInitial.address).to.be.null;
-    expect(statusInitial.deviceInfo).to.be.null;
+    await expectStatusReply(flexWS, (statusInitial) => {
+        expect(statusInitial.address).to.be.null;
+        expect(statusInitial.deviceInfo).to.be.null;
+    });
 
 
     // Expect a Status Broadcast after device is connected
-    const broadcastP = expectMessageType("Broadcast");
+    const broadcastChecked = expectBroadcast(flexWS, (broadcast) => {
+        expect(broadcast.message.type).to.be.equal("Status");
+        expect(broadcast.message.address).to.be.equal(virtualDevice.address);
+        expect(broadcast.message.deviceInfo.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
+        return broadcast
+    });
 
     await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
     expect(virtualDevice.isRegistered()).to.be.true;
 
     // this will await for Flex backgroundScanIntervalSeconds, which is 2 seconds currently
-    const broadcast = JSON.parse(await broadcastP);
-
-    expect(broadcast.message.type).to.be.equal("Status");
-    expect(broadcast.message.address).to.be.equal(virtualDevice.address);
-    expect(broadcast.message.deviceInfo.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
+    await broadcastChecked;
 
     // Reply to GetStatus should match the Status Broadcast
-    const statusFromCmdP = expectMessageType("Status");
-    flexWS.send(JSON.stringify({ type: "GetStatus" }));
-    const statusFromCmd = JSON.parse(await statusFromCmdP);
-    expect(statusFromCmd).to.deep.equal(broadcast.message);
+    expectStatusReply(flexWS, (status) => {
+        expect(status).to.deep.equal(broadcastChecked.message);
+    });
 
 
-    const disconnectBroadcastP = expectMessageType("Broadcast");
+    const disconnectBroadcast = expectBroadcast(flexWS, (broadcast) => {
+        expect(broadcast.message.type).to.be.equal("Status");
+        expect(broadcast.message.address).to.be.null;
+        expect(broadcast.message.deviceInfo).to.be.null;
+    });
     await virtualDevice.serialPort.close();
-    const disconnectBroadcast = JSON.parse(await disconnectBroadcastP);
-
-    expect(disconnectBroadcast.message.type).to.be.equal("Status");
-    expect(disconnectBroadcast.message.address).to.be.null;
-    expect(disconnectBroadcast.message.deviceInfo).to.be.null;
+    await disconnectBroadcast;
   });
 
   it("AUTO-CONNECT: can replay recording and receive data via WebSocket", async function () {
@@ -135,11 +141,8 @@ describe("Basic Flex functionality with Passthru device", () => {
     const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
 
     // Wait for connection
-    const deviceConnected = expectEvent(flexWS, "message", (s) => {
-      const msg = JSON.parse(s);
-      const isBroadcast = msg.type === "Broadcast";
-      const isConnected = msg.message.address === virtualDevice.address;
-      return isBroadcast && isConnected
+    const deviceConnected = expectBroadcast(flexWS, (msg) => {
+      expect(msg.message.address).to.be.equal(virtualDevice.address);
     });
 
     // Register virtual device with driver
