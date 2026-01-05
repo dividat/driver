@@ -92,46 +92,53 @@ describe("Basic Flex functionality with Passthru device", () => {
     });
   });
 
-  it("AUTO-CONNECT: get broadcasts about devices and auto-connects to them", async function () {
+  it("AUTO-CONNECT: send broadcasts about status changes", async function () {
     this.timeout(10000);
 
-    // Connect flex endpoint client
-    const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
+    // Connect to flex endpoint with multiple clients
+    const flexWS1 = await connectWS("ws://127.0.0.1:8382/flex");
+    const flexWS2 = await connectWS("ws://127.0.0.1:8382/flex");
+    const clients = [ flexWS1, flexWS2 ];
 
     // Initial status is null
-    await expectStatusReply(flexWS, (statusInitial) => {
-        expect(statusInitial.address).to.be.null;
-        expect(statusInitial.deviceInfo).to.be.null;
-    });
+    for (const ws of clients) {
+        await expectStatusReply(ws, (statusInitial) => {
+            expect(statusInitial.address).to.be.null;
+            expect(statusInitial.deviceInfo).to.be.null;
+        });
+    };
 
-
-    // Expect a Status Broadcast after device is connected
-    const broadcastChecked = expectBroadcast(flexWS, (broadcast) => {
+    const broadcast1 = expectBroadcast(flexWS1, (broadcast) => {
         expect(broadcast.message.type).to.be.equal("Status");
         expect(broadcast.message.address).to.be.equal(virtualDevice.address);
         expect(broadcast.message.deviceInfo.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
         return broadcast
     });
+    const broadcast2 = expectBroadcast(flexWS2, (b) => { return b });
 
     await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
     expect(virtualDevice.isRegistered()).to.be.true;
 
     // this will await for Flex backgroundScanIntervalSeconds, which is 2 seconds currently
-    await broadcastChecked;
+    expect(await broadcast1).to.deep.equal(await broadcast2);
 
-    // Reply to GetStatus should match the Status Broadcast
-    expectStatusReply(flexWS, (status) => {
-        expect(status).to.deep.equal(broadcastChecked.message);
-    });
+    for (const ws of clients) {
+        // Reply to GetStatus should match the Status Broadcast
+        expectStatusReply(ws, (status) => {
+            expect(status).to.deep.equal(broadcastChecked.message);
+        });
+    };
 
-
-    const disconnectBroadcast = expectBroadcast(flexWS, (broadcast) => {
+    const disconnectBroadcast1 = expectBroadcast(flexWS1, (broadcast) => {
         expect(broadcast.message.type).to.be.equal("Status");
         expect(broadcast.message.address).to.be.null;
         expect(broadcast.message.deviceInfo).to.be.null;
+        return broadcast
     });
+    const disconnectBroadcast2 = expectBroadcast(flexWS2, (b) => { return b });
+
     await virtualDevice.serialPort.close();
-    await disconnectBroadcast;
+    expect(await disconnectBroadcast1).to.deep.equal(await disconnectBroadcast2);
   });
 
   it("AUTO-CONNECT: can replay recording and receive data via WebSocket", async function () {
