@@ -94,7 +94,7 @@ class VirtualDevice {
     this.replayStopRequested = true;
   }
 
-  async replayRecording(filePath, loop = true) {
+  async replayRecording(filePath, loop = true, speedFactor = 1) {
     this.replayStopRequested = false;
     if (!this.serialPort || !this.serialPort.isOpen) {
       throw new Error("Serial port is not open");
@@ -129,9 +129,10 @@ class VirtualDevice {
             console.warn(`Failed to write frame data to serial port`);
           }
 
-          // Sleep for specified duration
-          if (sleepDuration > 0) {
-            await sleep(sleepDuration);
+          // Sleep for specified duration (adjusted by speed factor)
+          const adjustedSleepDuration = sleepDuration / speedFactor;
+          if (adjustedSleepDuration > 0) {
+            await sleep(adjustedSleepDuration);
           }
         }
       } catch (error) {
