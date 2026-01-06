@@ -6,6 +6,39 @@ const { program } = require("commander");
 // Import VirtualDevice from test utilities
 const VirtualDevice = require("../../test/flex/mock/VirtualDevice");
 
+// USB descriptors for different device types
+// Note: Values are 4-char hex strings without 0x prefix (sysFS format)
+const DEVICE_USB_INFO = {
+  // V4 is Teensy 3.x with bcdDevice <= 0x0277
+  v4: {
+    idVendor: "16c0",
+    idProduct: "0483",
+    manufacturer: "Teensyduino",
+    product: "Teensy",
+    bcdDevice: "0277",
+  },
+  // V5 is Teensy 4.0 with bcdDevice > 0x0277
+  v5: {
+    idVendor: "16c0",
+    idProduct: "0483",
+    manufacturer: "Teensyduino",
+    product: "Teensy",
+    bcdDevice: "0278",
+  },
+  // Sensitronics (V6)
+  sensitronics: {
+    idVendor: "16c0",
+    idProduct: "0483",
+    manufacturer: "Sensitronics",
+    product: "Dividat16x16",
+  },
+  // Passthru device
+  passthru: {
+    idVendor: "16c0",
+    product: "PASSTHRU",
+  },
+};
+
 // Define CLI using commander
 program
   .description("Replay Senso Flex serial data recordings to a running Driver via a mock device.\n\nNote: The Driver must be running with test mode enabled for mock device registration.")
@@ -13,6 +46,7 @@ program
   .option("-s, --speed <number>", "replay speed multiplier (>1 faster, <1 slower)", parseFloat, 1)
   .option("--once", "play recording once and exit instead of looping")
   .option("-u, --driver-url <url>", "URL of the running Driver", "http://127.0.0.1:8382")
+  .option("-d, --device <type>", "device type to emulate (v4, v5, sensitronics, passthru)", "passthru")
   .parse();
 
 const options = program.opts();
@@ -20,12 +54,17 @@ const recFile = program.args[0] || "rec/flex/zero.dat";
 const speed = options.speed;
 const loop = !options.once;
 const driverUrl = options.driverUrl;
+const deviceType = options.device.toLowerCase();
 
-// USB descriptors matching the passthru device
-const PASSTHRU_USB_INFO = {
-  idVendor: "16c0",
-  product: "PASSTHRU",
-};
+// Validate device type
+const validDeviceTypes = Object.keys(DEVICE_USB_INFO);
+if (!validDeviceTypes.includes(deviceType)) {
+  console.error(`Error: Invalid device type '${deviceType}'`);
+  console.error(`Valid options: ${validDeviceTypes.join(", ")}`);
+  process.exit(1);
+}
+
+const usbInfo = DEVICE_USB_INFO[deviceType];
 
 async function main() {
   console.log(`Replay Flex Recording Tool`);
@@ -34,6 +73,7 @@ async function main() {
   console.log(`Speed: ${speed}x`);
   console.log(`Loop: ${loop}`);
   console.log(`Driver URL: ${driverUrl}`);
+  console.log(`Device type: ${deviceType}`);
   console.log();
 
   // Check if recording file exists
@@ -43,8 +83,8 @@ async function main() {
     process.exit(1);
   }
 
-  // Create virtual device with passthru USB descriptors
-  const virtualDevice = new VirtualDevice(PASSTHRU_USB_INFO);
+  // Create virtual device with selected USB descriptors
+  const virtualDevice = new VirtualDevice(usbInfo);
 
   // Initialize the virtual serial port
   console.log("Initializing virtual device...");
