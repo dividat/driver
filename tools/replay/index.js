@@ -1,6 +1,6 @@
 // Mock up a Senso data and control server
 
-const argv = require('minimist')(process.argv.slice(2))
+const { program } = require('commander')
 const fs = require('fs')
 const split = require('binary-split')
 const net = require('net')
@@ -9,9 +9,18 @@ const EventEmitter = require('events')
 
 const control = require('./control')
 
-var recFile = argv['_'].pop() || 'rec/senso/zero.dat'
-let speedFactor = 1/(parseFloat(argv['speed']) || 1)
-let loop = !argv['once']
+// Define CLI using commander
+program
+  .description('Mock up a Senso data and control server by replaying recorded data.')
+  .argument('[recording-file]', 'path to the recording file', 'rec/senso/zero.dat')
+  .option('-s, --speed <number>', 'replay speed multiplier (>1 faster, <1 slower)', parseFloat, 1)
+  .option('--once', 'play recording once and exit instead of looping')
+  .parse()
+
+const options = program.opts()
+const recFile = program.args[0] || 'rec/senso/zero.dat'
+let speedFactor = 1 / (options.speed || 1)
+let loop = !options.once
 
 async function mockSenso (profile, data) {
   var socket = await listenForConnection('0.0.0.0', 55567)

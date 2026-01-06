@@ -1,44 +1,25 @@
 #!/usr/bin/env node
 // Replay Senso Flex serial data recordings to a running Driver via mock device
 
-const path = require("path");
-const argv = require("minimist")(process.argv.slice(2));
-
-// Show help if requested
-if (argv["help"] || argv["h"]) {
-  console.log(`
-Usage: node index.js [options] <recording-file>
-
-Replay Senso Flex serial data recordings to a running Driver via a mock device.
-
-Arguments:
-  recording-file          Path to the recording file (default: rec/flex/zero.dat)
-
-Options:
-  --speed <number>        Replay speed multiplier (default: 1)
-                          Use values > 1 to speed up, < 1 to slow down
-  --once                  Play recording once and exit (default: loop continuously)
-  --driver-url <url>      URL of the running Driver (default: http://127.0.0.1:8382)
-  -h, --help              Show this help message
-
-Examples:
-  node index.js recording.dat                     Replay at normal speed, looping
-  node index.js --speed 2 recording.dat           Replay at 2x speed
-  node index.js --once --speed 0.5 recording.dat  Replay once at half speed
-
-Note: The Driver must be running with test mode enabled for mock device registration.
-`);
-  process.exit(0);
-}
+const { program } = require("commander");
 
 // Import VirtualDevice from test utilities
 const VirtualDevice = require("../../test/flex/mock/VirtualDevice");
 
-// Parse CLI arguments
-const recFile = argv["_"].pop() || "rec/flex/zero.dat";
-const speed = parseFloat(argv["speed"]) || 1;
-const loop = !argv["once"];
-const driverUrl = argv["driver-url"] || "http://127.0.0.1:8382";
+// Define CLI using commander
+program
+  .description("Replay Senso Flex serial data recordings to a running Driver via a mock device.\n\nNote: The Driver must be running with test mode enabled for mock device registration.")
+  .argument("[recording-file]", "path to the recording file", "rec/flex/zero.dat")
+  .option("-s, --speed <number>", "replay speed multiplier (>1 faster, <1 slower)", parseFloat, 1)
+  .option("--once", "play recording once and exit instead of looping")
+  .option("-u, --driver-url <url>", "URL of the running Driver", "http://127.0.0.1:8382")
+  .parse();
+
+const options = program.opts();
+const recFile = program.args[0] || "rec/flex/zero.dat";
+const speed = options.speed;
+const loop = !options.once;
+const driverUrl = options.driverUrl;
 
 // USB descriptors matching the passthru device
 const PASSTHRU_USB_INFO = {

@@ -16,6 +16,6 @@
   },
   "devDependencies": {
     "binary-split": "^1.0.5",
-    "minimist": "^1.2.8"
+    "commander": "^12.1.0"
   }
 }
