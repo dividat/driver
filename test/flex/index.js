@@ -92,6 +92,33 @@ describe("Basic Flex functionality with Passthru device", () => {
     });
   });
 
+  it("present PASSTHRU-<foo> as <foo> device to client", async function () {
+    this.timeout(3000);
+
+    // Create virtual Flex device with specified USB details
+    const passthruFlexDevice = new VirtualDevice({
+      idVendor: "16c0",
+      product: "PASSTHRU-PretendFlex",
+    });
+    await passthruFlexDevice.initialize();
+
+    await passthruFlexDevice.registerWithDriver("http://127.0.0.1:8382");
+    expect(passthruFlexDevice.isRegistered()).to.be.true;
+
+    // Connect flex endpoint client
+    const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
+    const cmd = {
+      type: "Connect",
+      address: passthruFlexDevice.address,
+    };
+    sendCmd(flexWS, cmd);
+
+    await expectStatusReply(flexWS, (status) => {
+        expect(status.address).to.be.equal(passthruFlexDevice.address);
+        expect(status.deviceInfo.usbDevice.product).to.be.equal("PretendFlex");
+    });
+  });
+
   it("AUTO-CONNECT: send broadcasts about status changes", async function () {
     this.timeout(10000);
 

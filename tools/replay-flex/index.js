@@ -32,11 +32,6 @@ const DEVICE_USB_INFO = {
     manufacturer: "Sensitronics",
     product: "Dividat16x16",
   },
-  // Passthru device
-  passthru: {
-    idVendor: "16c0",
-    product: "PASSTHRU",
-  },
 };
 
 // Define CLI using commander
@@ -46,7 +41,8 @@ program
   .option("-s, --speed <number>", "replay speed multiplier (>1 faster, <1 slower)", parseFloat, 1)
   .option("--once", "play recording once and exit instead of looping")
   .option("-u, --driver-url <url>", "URL of the running Driver", "http://127.0.0.1:8382")
-  .option("-d, --device <type>", "device type to emulate (v4, v5, sensitronics, passthru)", "passthru")
+  .requiredOption("-d, --device <type>", "device type to emulate (v4, v5, sensitronics)")
+  .option("--passthru", "Replay the recording verbatim. For use with recordings of /flex WS stream.")
   .parse();
 
 const options = program.opts();
@@ -64,7 +60,11 @@ if (!validDeviceTypes.includes(deviceType)) {
   process.exit(1);
 }
 
-const usbInfo = DEVICE_USB_INFO[deviceType];
+// Get USB info and optionally apply passthru prefix
+const usbInfo = { ...DEVICE_USB_INFO[deviceType] };
+if (options.passthru) {
+  usbInfo.product = `PASSTHRU-${deviceType}`;
+}
 
 async function main() {
   console.log(`Replay Flex Recording Tool`);

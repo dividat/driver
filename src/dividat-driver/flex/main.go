@@ -16,6 +16,7 @@ The functionality of this module is as follows:
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,14 +117,24 @@ type SerialReader interface {
 }
 
 func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
-	if deviceInfo.Manufacturer == "Teensyduino" {
+	if strings.HasPrefix(deviceInfo.Product, "PASSTHRU") {
+		return &passthru.PassthruReader{}
+	} else if deviceInfo.Manufacturer == "Teensyduino" {
 		return &sensingtex.SensingTexReader{}
 	} else if deviceInfo.Manufacturer == "Sensitronics" {
 		return &sensitronics.SensitronicsReader{}
-	} else if deviceInfo.Product == "PASSTHRU" {
-		return &passthru.PassthruReader{}
 	}
 	return nil
+}
+
+// maybeRenamePassthruPrefix returns a copy of the UsbDeviceInfo with the
+// "PASSTHRU-" prefix stripped from the Product field, if present.
+func maybeRenamePassthruPrefix(deviceInfo websocket.UsbDeviceInfo) websocket.UsbDeviceInfo {
+	const prefix = "PASSTHRU-"
+	if strings.HasPrefix(deviceInfo.Product, prefix) {
+		deviceInfo.Product = strings.TrimPrefix(deviceInfo.Product, prefix)
+	}
+	return deviceInfo
 }
 
 // connect to a "validated" device
@@ -275,7 +286,8 @@ func (backend *DeviceBackend) GetStatus() websocket.Status {
 
 	if backend.currentDevice != nil {
 		status.Address = &backend.currentDevice.Path
-		status.DeviceInfo = &websocket.DeviceInfo{UsbDeviceInfo: backend.currentDevice}
+		renamed := maybeRenamePassthruPrefix(*backend.currentDevice)
+		status.DeviceInfo = &websocket.DeviceInfo{UsbDeviceInfo: &renamed}
 	}
 	return status
 }
@@ -324,7 +336,7 @@ func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan w
 				break
 			}
 
-			usbDevice := usbDevice // copy to ref-by-value, yay golang
+			usbDevice := maybeRenamePassthruPrefix(usbDevice)
 			device := websocket.DeviceInfo{UsbDeviceInfo: &usbDevice}
 
 			devices <- device

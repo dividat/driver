@@ -131,9 +131,7 @@ class VirtualDevice {
 
           // Sleep for specified duration (adjusted by speed factor)
           const adjustedSleepDuration = sleepDuration / speedFactor;
-          if (adjustedSleepDuration > 0) {
-            await sleep(adjustedSleepDuration);
-          }
+          await sleep(adjustedSleepDuration);
         }
       } catch (error) {
         throw new Error(`Failed to replay recording: ${error.message}`);

@@ -120,7 +120,66 @@ Data from Senso can be recorded using the [`recorder`](src/dividat-driver/record
 
 #### Senso Flex data
 
-Like Senso data, but with `make record-flex`.
+**Short version**: on Linux, record the raw serial data using method 2 explained
+below:
+
+        ./tools/record-flex-serial -o recording.dat
+
+on macOS, use method 3 to record the /flex stream or some form of method 1.
+
+**Long version**: there are 3 ways to record Senso Flex data:
+
+1. Reading data directly from the serial device, e.g.
+
+        socat stdio /dev/ttyACM0 > recording.dat
+
+   However, this means you cannot run the driver and thus cannot interact with
+   the device. In particular, any setup commands would have to be either
+   executed manually or prior to starting the recording.
+
+   Not recommended and not supported for replay. timestamping+base64 left as an
+   exercise.
+
+2. Recording serial data by spying on driver's reads using `strace`:
+
+        ./tools/record-flex-serial -o recording.dat
+
+   By default, the script will attach to `pidof dividat-driver` and spy on reads
+   from `/dev/ttyACM0`, but you can override it with `-p` and `-d` flags. See
+   `./tools/record-flex-serial --help` for details.
+
+   This records serial data that can be then be used to do end-to-end replays
+   (that involve the driver's processing).
+
+   This method only works on Linux.
+
+   To replay the data, use
+
+        node tools/replay-flex -d <device-type> recording.dat
+
+3. Recording the websocket stream from `/flex`:
+
+   This records the processed output as produced by the driver, using the same
+   mechanism as for the Senso.
+
+        make record-flex > recording.dat
+
+   This data can be replayed using a special "passthru" mock device that
+   pretends to be a different device to the client:
+
+        node tools/replay-flex -d passthru-<type> recording.dat
+
+   This method can be useful if:
+   - You need to capture the exact output of the driver instead of the device
+     (e.g. for diff'ing)
+   - You cannot use `strace` for recording (e.g. on macOS)
+
+   Note: for `sensitronics` devices, the driver outputs identical bytes to the
+   serial data read, just chunked/framed (i.e. `concat(serial out) ==
+   concat(WS binary stream)`). This means you can record the websocket
+   stream, but still replay as if it was recorded directly from the serial
+   output (using `-d sensitronics`).
+
 
 ### Data replayer
 
