@@ -131,9 +131,7 @@ func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
 // "PASSTHRU-" prefix stripped from the Product field, if present.
 func maybeRenamePassthruPrefix(deviceInfo websocket.UsbDeviceInfo) websocket.UsbDeviceInfo {
 	const prefix = "PASSTHRU-"
-	if strings.HasPrefix(deviceInfo.Product, prefix) {
-		deviceInfo.Product = strings.TrimPrefix(deviceInfo.Product, prefix)
-	}
+	deviceInfo.Product = strings.TrimPrefix(deviceInfo.Product, prefix)
 	return deviceInfo
 }
 
