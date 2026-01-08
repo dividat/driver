@@ -11,11 +11,9 @@ import (
 	"go.bug.st/serial"
 )
 
-// Serial communication
-
 const (
-	HEADER_START_MARKER    = 0xFF
-	HEADER_TYPE_TERMINATOR = 0xA // newline
+	HEADER_START_MARKER = 0xFF
+	HEADER_SIZE = 4
 )
 
 type SensitronicsReader struct{}
@@ -53,45 +51,41 @@ func (SensitronicsReader) ReadFromSerial(ctx context.Context, logger *logrus.Ent
 }
 
 func readMessage(reader *bufio.Reader) ([]byte, error) {
-	// read header start marker
+	// Read start marker
 	marker, err := reader.ReadByte()
 	if err != nil {
 		return nil, err
 	}
-
 	if marker != HEADER_START_MARKER {
-		return nil, fmt.Errorf("Expected header start marker, got %u", marker)
+		return nil, fmt.Errorf("expected header start marker 0x%02X, got 0x%02X", HEADER_START_MARKER, marker)
 	}
 
-	// read type from header, return will include the HEADER_TYPE_TERMINATOR
-	messageType, err := reader.ReadBytes(HEADER_TYPE_TERMINATOR)
+	// Read message type
+	messageType, err := reader.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 
-	messageLengthBytesLE := make([]byte, 2, 2)
-	_, err = io.ReadFull(reader, messageLengthBytesLE)
-	if err != nil {
+	// Read message length
+	var lengthBytes [2]byte
+	if _, err := io.ReadFull(reader, lengthBytes[:]); err != nil {
+		return nil, err
+	}
+	bodyLength := int(binary.LittleEndian.Uint16(lengthBytes[:]))
+
+	// Allocate full message buffer and reassemble header
+	message := make([]byte, HEADER_SIZE+bodyLength)
+	message[0] = marker
+	message[1] = messageType
+	message[2] = lengthBytes[0]
+	message[3] = lengthBytes[1]
+
+	// Read body directly into message buffer
+	if _, err := io.ReadFull(reader, message[HEADER_SIZE:]); err != nil {
 		return nil, err
 	}
 
-	messageLength := uint(binary.LittleEndian.Uint16(messageLengthBytesLE))
-
-	messageBody := make([]byte, messageLength, messageLength)
-	_, err = io.ReadFull(reader, messageBody)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: bump go to 1.22 and replace with slices.Concat or otherwise
-	totalLength := 1 + len(messageType) + len(messageLengthBytesLE) + len(messageBody)
-	fullMessage := make([]byte, 0, totalLength)
-	fullMessage = append(fullMessage, marker)
-	fullMessage = append(fullMessage, messageType...)
-	fullMessage = append(fullMessage, messageLengthBytesLE...)
-	fullMessage = append(fullMessage, messageBody...)
-
-	return fullMessage, nil
+	return message, nil
 }
 
 // Infinite loop for requesting and reading serial data.
