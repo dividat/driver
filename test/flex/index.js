@@ -1,9 +1,9 @@
-/* eslint-env mocha */
 const { wait, startDriver, connectWS, expectEvent } = require("../utils");
 const expect = require("chai").expect;
 const VirtualDevice = require("./mock/VirtualDevice");
 const path = require("path");
 const {
+  waitForEndpoint,
   generateFlexSerialFrame,
   generateRandomSensitronicsFrame,
   splitBufferRandomly,
@@ -35,27 +35,50 @@ function expectBroadcast(ws, check) {
     return expectMessageType(ws, "Broadcast").then(check)
 }
 
+// Connects to the WebSocket and verifies driver is connected to the device.
+async function connectAndVerifyWS(device) {
+  const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
+
+  await wait(30);
+
+  expectStatusReply(flexWS, (status) => {
+    expect(status.address).to.be.equal(device.address);
+  });
+
+  return flexWS;
+}
+
+async function withDeviceAndClient(deviceConfig) {
+  const virtualDevice = new VirtualDevice(deviceConfig);
+  await virtualDevice.initialize();
+
+  await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
+  expect(virtualDevice.isRegistered()).to.be.true;
+
+  const flexWS = await connectAndVerifyWS(virtualDevice);
+
+  return [virtualDevice, flexWS];
+}
+
 describe("Flex functionality", () => {
   var driver;
 
-  // Global driver start/stop
   beforeEach(async () => {
     var code = 0;
     driver = startDriver().on("exit", (c) => {
       code = c;
     });
 
-    // Give driver 500ms to start up
-    await wait(500);
+    await waitForEndpoint("http://127.0.0.1:8382/flex");
     expect(code).to.be.equal(0);
     driver.removeAllListeners();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     driver.kill();
   });
 
-  describe("Passthru device", () => {
+  describe("Generic features (PASSTHRU device/reader)", () => {
     var virtualDevice;
 
     beforeEach(async () => {
@@ -66,19 +89,13 @@ describe("Flex functionality", () => {
       await virtualDevice.initialize();
     });
 
-    afterEach(async () => {
-      if (virtualDevice && virtualDevice.serialPort) {
-        virtualDevice.serialPort.close();
-      }
-    });
-
-    it("MANUAL-CONNECT: register virtual device and check status changes", async function () {
+    it("Commands: Connect and GetStatus", async function () {
       this.timeout(3000);
 
       await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
       expect(virtualDevice.isRegistered()).to.be.true;
 
-      await wait(500);
+      await wait(20);
 
       // Connect flex endpoint client
       const flexWS = await connectWS("ws://127.0.0.1:8382/flex", { }, [ "manual-connect" ]);
@@ -101,8 +118,8 @@ describe("Flex functionality", () => {
       });
     });
 
-    it("MANUAL-CONNECT: can discover and list devices", async function () {
-      const virtualDevice1 = virtualDevice; // set up in beforeEach
+    it("Commands: Discover", async function () {
+      const virtualDevice1 = virtualDevice;
 
       // Create virtual Flex device with specified USB details
       const virtualDevice2 = new VirtualDevice({
@@ -145,12 +162,9 @@ describe("Flex functionality", () => {
           return { path: d.address, product: d.product }
       });
       expect(receivedFields).to.have.deep.members(actualFields);
-
-      // Clean up the extra device
-      virtualDevice2.serialPort.close();
     });
 
-    it("AUTO-CONNECT: send broadcasts about status changes", async function () {
+    it("Broadcasts: Status on Connect and Disconnect ", async function () {
       this.timeout(10000);
 
       // Connect to flex endpoint with multiple clients
@@ -199,41 +213,22 @@ describe("Flex functionality", () => {
       expect(await disconnectBroadcast1).to.deep.equal(await disconnectBroadcast2);
     });
 
-    it("AUTO-CONNECT: can replay recording and receive data via WebSocket", async function () {
+    it("Can receive binary data verbatim with passthru", async function () {
       this.timeout(10000);
 
-      // Connect flex endpoint client
-      const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
-
-      // Wait for connection
-      const deviceConnected = expectBroadcast(flexWS, (msg) => {
-        expect(msg.message.address).to.be.equal(virtualDevice.address);
-      });
-
-      // Register virtual device with driver
       await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
-      await deviceConnected;
+      const flexWS = await connectAndVerifyWS(virtualDevice);
 
-
-      const recordingPath = path.join(__dirname, "test-recording.dat");
-      // Load and decode the recording file to compare with received data
-      const fs = require("fs");
-      const recordingContent = fs.readFileSync(recordingPath, "utf8");
-      const recordingLines = recordingContent.trim().split("\n");
-
-      // Extract and decode all base64 data from recording
-      let expectedBinaryData = [];
-      for (const line of recordingLines) {
-        const [, base64Data] = line.split(", ");
-        const binaryData = Buffer.from(base64Data, "base64");
-        expectedBinaryData.push(binaryData);
+      // generate some random data
+      const binaryData = Buffer.alloc(2048);
+      for (let i = 0; i < binaryData.length; i++) {
+        binaryData[i] = Math.floor(Math.random() * 256);
       }
-      expectedBinaryData = Buffer.concat(expectedBinaryData);
+      const binaryDataChunks = splitBufferRandomly(binaryData, 64, 256);
 
       // Set up promise to collect WebSocket data
       let receivedData = Buffer.from("");
       const expectData = new Promise((resolve, reject) => {
-
         const timeout = setTimeout(() => {
           if (receivedData.length === 0) {
             reject(new Error("No data received within timeout"));
@@ -241,7 +236,7 @@ describe("Flex functionality", () => {
             reject(
               new Error(
                 "Not all bytes received in time: " +
-                  `${receivedData.length} out of ${expectedBinaryData.length}`,
+                  `${receivedData.length} out of ${binaryData.length}`,
               ),
             );
           }
@@ -251,7 +246,7 @@ describe("Flex functionality", () => {
           if (isBinary) {
             receivedData = Buffer.concat([receivedData, data]);
           }
-          if (receivedData.length === expectedBinaryData.length) {
+          if (receivedData.length === binaryData.length) {
             clearTimeout(timeout);
             resolve();
             return;
@@ -259,53 +254,31 @@ describe("Flex functionality", () => {
         });
       });
 
-      // Start replaying the recording
-      setTimeout(() => {
-        virtualDevice.replayRecording(recordingPath, false)
-      }, 0);
+      for (const chunk of binaryDataChunks) {
+        virtualDevice.serialPort.write(chunk);
+        await wait(10)
+      }
 
-      // Wait for data to be received
       await expectData;
 
-      // Verify we received data
-      expect(receivedData.length).to.be.equal(expectedBinaryData.length);
-
-      // Verify that received data matches the first frame from recording
-      expect(receivedData).to.deep.equal(expectedBinaryData);
+      expect(receivedData.length).to.be.equal(binaryData.length);
+      expect(receivedData).to.deep.equal(binaryData);
     });
   });
 
-  describe("Passthru-PretendFlex device", () => {
+  describe("PASSTHRU-PretendFlex device", () => {
     var virtualDevice;
+    var flexWS;
 
-    beforeEach(async () => {
-      virtualDevice = new VirtualDevice({
+    beforeEach(async function() {
+      this.timeout(3000);
+      [virtualDevice, flexWS] = await withDeviceAndClient({
         idVendor: "16c0",
         product: "PASSTHRU-PretendFlex",
       });
-      await virtualDevice.initialize();
-    });
-
-    afterEach(async () => {
-      if (virtualDevice && virtualDevice.serialPort) {
-        virtualDevice.serialPort.close();
-      }
     });
 
     it("present PASSTHRU-<foo> as <foo> device to client", async function () {
-      this.timeout(3000);
-
-      await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
-      expect(virtualDevice.isRegistered()).to.be.true;
-
-      // Connect flex endpoint client
-      const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
-      const cmd = {
-        type: "Connect",
-        address: virtualDevice.address,
-      };
-      sendCmd(flexWS, cmd);
-
       await expectStatusReply(flexWS, (status) => {
           expect(status.address).to.be.equal(virtualDevice.address);
           expect(status.deviceInfo.usbDevice.product).to.be.equal("PretendFlex");
@@ -315,37 +288,20 @@ describe("Flex functionality", () => {
 
   describe("Flex v4 device", () => {
     var virtualDevice;
+    var flexWS;
 
-    beforeEach(async () => {
-      virtualDevice = new VirtualDevice({
+    beforeEach(async function() {
+      this.timeout(3000);
+      [virtualDevice, flexWS] = await withDeviceAndClient({
         idVendor: "16c0",
         manufacturer: "Teensyduino",
         bcdDevice: "0277",
       });
-      await virtualDevice.initialize();
-    });
-
-    afterEach(async () => {
-      if (virtualDevice && virtualDevice.serialPort) {
-        virtualDevice.serialPort.close();
-      }
     });
 
     it("can receive 8-bit synthetic data via WebSocket", async function () {
       this.timeout(10000);
 
-      // Connect flex endpoint client
-      const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
-
-      const deviceConnected = expectBroadcast(flexWS, (msg) => {
-        expect(msg.message.address).to.be.equal(virtualDevice.address);
-      });
-
-      // Register virtual device with driver
-      await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
-      await deviceConnected;
-
-      // Generate synthetic frames (no mode switch needed, driver starts in 8-bit mode)
       const numFrames = 24;
 
       // Set up promise to collect WebSocket data
@@ -409,31 +365,19 @@ describe("Flex functionality", () => {
 
   describe("Flex v5 device", () => {
     var virtualDevice;
+    var flexWS;
 
-    beforeEach(async () => {
-      virtualDevice = new VirtualDevice({
+    beforeEach(async function() {
+      this.timeout(3000);
+      [virtualDevice, flexWS] = await withDeviceAndClient({
         idVendor: "16c0",
         manufacturer: "Teensyduino",
         bcdDevice: "0278",
       });
-      await virtualDevice.initialize();
-    });
-
-    afterEach(async () => {
-      if (virtualDevice && virtualDevice.serialPort) {
-        virtualDevice.serialPort.close();
-      }
     });
 
     it("can receive 12-bit synthetic data via WebSocket", async function () {
       this.timeout(10000);
-
-      // Connect flex endpoint client
-      const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
-
-      const deviceConnected = expectBroadcast(flexWS, (msg) => {
-        expect(msg.message.address).to.be.equal(virtualDevice.address);
-      });
 
       // Track commands received from driver to know when mode switch is complete
       const modeSwitchDone = new Promise((resolve) => {
@@ -453,25 +397,19 @@ describe("Flex functionality", () => {
         });
       });
 
-      // Register virtual device with driver
-      await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
-      await deviceConnected;
-
       // Switch to 12-bit mode by sending UM\n command
       const switchTo12BitCmd = Buffer.from("UM\n");
       flexWS.send(switchTo12BitCmd);
 
       // Send dummy data to unblock the old reader (it's blocking on ReadByte)
-      // NOTE: this is theoretical bug in the driver, but this happens only in the
-      // synthetic setup and there's no point patching to-be-legacy device
+      // NOTE: this is a theoretical bug in the driver, but this happens only in
+      // the synthetic setup and there's no point patching to-be-legacy device
       // corner-cases at this point
       await wait(50);
       virtualDevice.serialPort.write(Buffer.from([0x00]));
 
-      // Wait for driver to complete mode switch (sends UM\n then S\n)
       await modeSwitchDone;
 
-      // Generate synthetic frames
       const numFrames = 24;
 
       // Set up promise to collect WebSocket data
@@ -500,20 +438,15 @@ describe("Flex functionality", () => {
         });
       });
 
-      // Send the synthetic serial data to the device
       for (let i = 0; i < numFrames; i++) {
         virtualDevice.serialPort.write(generateFlexSerialFrame(i, 12));
       }
 
-      // Wait for data to be received
       await expectData;
 
-      // Verify we received the correct number of frames
       expect(receivedFrames.length).to.be.equal(numFrames);
 
       // Check each frame's content
-      // The driver forwards the sample data (without headers) in 12-bit mode:
-      // 4 bytes per sample: row, col, pressure_msb, pressure_lsb
       for (let frameIdx = 0; frameIdx < numFrames; frameIdx++) {
         const frame = receivedFrames[frameIdx];
 
@@ -537,8 +470,11 @@ describe("Flex functionality", () => {
 
   describe("Sensitronics device", () => {
     var virtualDevice;
+    var flexWS;
 
-    beforeEach(async () => {
+    beforeEach(async function() {
+      this.timeout(3000);
+
       virtualDevice = new VirtualDevice({
         idVendor: "16c0",
         idProduct: "0483",
@@ -548,23 +484,10 @@ describe("Flex functionality", () => {
       await virtualDevice.initialize();
     });
 
-    afterEach(async () => {
-      if (virtualDevice && virtualDevice.serialPort) {
-        virtualDevice.serialPort.close();
-      }
-    });
-
-    it("driver starts send command, chunks frames", async function () {
+    it("driver sends start command, chunks frames", async function () {
       this.timeout(10000);
 
-      // Connect flex endpoint client
-      const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
-
-      const deviceConnected = expectBroadcast(flexWS, (msg) => {
-        expect(msg.message.address).to.be.equal(virtualDevice.address);
-      });
-
-      // Wait for driver to send start measurement command
+      // Set up listener for start command before connecting
       const startCmdReceived = new Promise((resolve) => {
         virtualDevice.serialPort.on("data", (data) => {
           const str = data.toString();
@@ -574,27 +497,23 @@ describe("Flex functionality", () => {
         });
       });
 
-      // Register virtual device with driver
       await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
-      await deviceConnected;
+      expect(virtualDevice.isRegistered()).to.be.true;
 
-      // Wait for driver to be ready to receive data
-      await startCmdReceived;
+      flexWS = await connectAndVerifyWS(virtualDevice);
 
       // Generate random frames
-      const numFrames = 24;
+      const numFrames = 30;
       const generatedFrames = [];
       for (let i = 0; i < numFrames; i++) {
         generatedFrames.push(generateRandomSensitronicsFrame(50));
       }
 
-      // Concatenate all frames into one buffer
       const allFramesBuffer = Buffer.concat(generatedFrames);
 
       // Split the buffer into random chunks to simulate fragmented transmission
       const chunks = splitBufferRandomly(allFramesBuffer, 1, 15);
 
-      // Set up promise to collect WebSocket data
       const receivedFrames = [];
       const expectData = new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -620,18 +539,16 @@ describe("Flex functionality", () => {
         });
       });
 
-      // Send the chunks with small delays to simulate real transmission
+      // wait for start command before producing data
+      await startCmdReceived;
       for (const chunk of chunks) {
         virtualDevice.serialPort.write(chunk);
       }
 
-      // Wait for data to be received
       await expectData;
 
-      // Verify we received the correct number of frames
       expect(receivedFrames.length).to.be.equal(numFrames);
 
-      // Verify each received frame matches what we sent
       for (let i = 0; i < numFrames; i++) {
         expect(
           receivedFrames[i].equals(generatedFrames[i]),
