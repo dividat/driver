@@ -164,6 +164,23 @@ describe("Flex functionality", () => {
       expect(receivedFields).to.have.deep.members(actualFields);
     });
 
+    it("Multiple clients can Connect and GetStatus at the same time", async function () {
+      // obviously not a complete test, but sufficient to detect certain hiccups in the driver
+      this.timeout(2000);
+
+      await virtualDevice.registerWithDriver("http://127.0.0.1:8382");
+
+      const clients = [...Array(5).keys()].map((_) => {
+          return connectWS("ws://127.0.0.1:8382/flex").then((ws) => {
+              return expectStatusReply(ws, (status) => {
+                  expect(status.address).to.be.equal(virtualDevice.address);
+              });
+          });
+      });
+
+      await Promise.all(clients);
+    });
+
     it("Broadcasts: Status on Connect and Disconnect ", async function () {
       this.timeout(10000);
 

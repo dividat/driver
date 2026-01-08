@@ -16,6 +16,7 @@ The functionality of this module is as follows:
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -140,6 +141,12 @@ func (backend *DeviceBackend) connectInternal(device websocket.UsbDeviceInfo) er
 	// Only allow one connection change at a time
 	backend.connectionChangeMutex.Lock()
 	defer backend.connectionChangeMutex.Unlock()
+
+	// in theory we could just look at UsbDeviceInfo.Path, but being defensive
+	if reflect.DeepEqual(&device, backend.currentDevice) {
+		backend.log.Info("Ignoring connect request since we are already connected to the same device.")
+		return nil
+	}
 
 	// disconnect current connection first
 	backend.Disconnect()
