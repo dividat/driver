@@ -290,4 +290,88 @@ describe("Basic Flex functionality with Passthru device", () => {
     // Verify that received data matches the first frame from recording
     expect(receivedData).to.deep.equal(expectedBinaryData);
   });
+
+  it("Flex v4: can replay zero recording and receive data via WebSocket", async function () {
+    this.timeout(10000);
+
+    flexDevice = new VirtualDevice({
+      idVendor: "16c0",
+      manufacturer: "Teensyduino"
+    });
+    await flexDevice.initialize();
+
+    // Connect flex endpoint client
+    const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
+
+    const deviceConnected = expectBroadcast(flexWS, (msg) => {
+      expect(msg.message.address).to.be.equal(flexDevice.address);
+    });
+
+    // Register virtual device with driver
+    await flexDevice.registerWithDriver("http://127.0.0.1:8382");
+    await deviceConnected;
+    console.log("Device connected")
+
+    const recordingPath = path.join(__dirname, "../../rec/flex/v4/zero.v4.serial.dat");
+
+    // Set up promise to collect WebSocket data
+    let receivedFrames = 0;
+    const expectedFrames = 20;
+    const expectData = new Promise((resolve, reject) => {
+
+      const timeout = setTimeout(() => {
+            if (receivedFrames === 0) {
+              reject(new Error("No data received within timeout"));
+            } else if (receivedFrames < expectedFrames) {
+              reject(
+                new Error(
+                  "Expected to receive at least 5 frames, got: " + receivedFrames
+                )
+              );
+            }
+          }, 8000);
+
+      flexWS.on("message", function message(data, isBinary) {
+        // Check each frame
+        if (isBinary) {
+          // Check that data is at least 3 bytes long (at least 1 sensel sample)
+          expect(data.length).to.be.at.least(3);
+
+          for (let i = 0; i + 2 < data.length; i += 3) {
+            const x = data[i];
+            const y = data[i + 1];
+            const f = data[i + 2];
+
+            // Check that x and y coordinates are < 24
+            expect(x).to.be.lessThan(24);
+            expect(y).to.be.lessThan(24);
+
+            // Check that force is zero-ish
+            expect(f).to.be.lessThan(100);
+          }
+
+          receivedFrames++;
+        }
+        if (receivedFrames === expectedFrames) {
+          clearTimeout(timeout);
+          resolve();
+          return;
+        }
+      });
+    });
+
+    // Start replaying the recording
+    setTimeout(() => {
+      flexDevice.replayRecording(recordingPath, false).catch((err) => {
+        console.error("Error replaying recording:", err);
+      });
+    }, 0);
+
+    // Wait for data to be received
+    await expectData;
+
+    // Verify we received data
+    expect(receivedFrames).to.be.equal(expectedFrames);
+  });
+
 });
