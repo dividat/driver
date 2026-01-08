@@ -3,6 +3,7 @@ const { wait, startDriver, connectWS, expectEvent } = require("../utils");
 const expect = require("chai").expect;
 const VirtualDevice = require("./mock/VirtualDevice");
 const path = require("path");
+const { generateFlexSerialFrame } = require("./helpers");
 
 function expectMessageType(ws, msgType) {
     return expectEvent(ws, "message", (s) => {
@@ -291,87 +292,209 @@ describe("Basic Flex functionality with Passthru device", () => {
     expect(receivedData).to.deep.equal(expectedBinaryData);
   });
 
-  it("Flex v4: can replay zero recording and receive data via WebSocket", async function () {
+  it("Flex v4: can receive 8-bit synthetic data via WebSocket", async function () {
     this.timeout(10000);
 
-    flexDevice = new VirtualDevice({
+    const flexV4Device = new VirtualDevice({
       idVendor: "16c0",
-      manufacturer: "Teensyduino"
+      manufacturer: "Teensyduino",
+      bcdDevice: "0277",
     });
-    await flexDevice.initialize();
+    await flexV4Device.initialize();
 
     // Connect flex endpoint client
     const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
 
     const deviceConnected = expectBroadcast(flexWS, (msg) => {
-      expect(msg.message.address).to.be.equal(flexDevice.address);
+      expect(msg.message.address).to.be.equal(flexV4Device.address);
     });
 
     // Register virtual device with driver
-    await flexDevice.registerWithDriver("http://127.0.0.1:8382");
+    await flexV4Device.registerWithDriver("http://127.0.0.1:8382");
     await deviceConnected;
-    console.log("Device connected")
 
-    const recordingPath = path.join(__dirname, "../../rec/flex/v4/zero.v4.serial.dat");
+    // Generate synthetic frames (no mode switch needed, driver starts in 8-bit mode)
+    const numFrames = 24;
 
     // Set up promise to collect WebSocket data
-    let receivedFrames = 0;
-    const expectedFrames = 20;
+    const receivedFrames = [];
     const expectData = new Promise((resolve, reject) => {
-
       const timeout = setTimeout(() => {
-            if (receivedFrames === 0) {
-              reject(new Error("No data received within timeout"));
-            } else if (receivedFrames < expectedFrames) {
-              reject(
-                new Error(
-                  "Expected to receive at least 5 frames, got: " + receivedFrames
-                )
-              );
-            }
-          }, 8000);
+        if (receivedFrames.length === 0) {
+          reject(new Error("No data received within timeout"));
+        } else if (receivedFrames.length < numFrames) {
+          reject(
+            new Error(
+              `Expected ${numFrames} frames, got: ${receivedFrames.length}`
+            )
+          );
+        }
+      }, 8000);
 
       flexWS.on("message", function message(data, isBinary) {
-        // Check each frame
         if (isBinary) {
-          // Check that data is at least 3 bytes long (at least 1 sensel sample)
-          expect(data.length).to.be.at.least(3);
-
-          for (let i = 0; i + 2 < data.length; i += 3) {
-            const x = data[i];
-            const y = data[i + 1];
-            const f = data[i + 2];
-
-            // Check that x and y coordinates are < 24
-            expect(x).to.be.lessThan(24);
-            expect(y).to.be.lessThan(24);
-
-            // Check that force is zero-ish
-            expect(f).to.be.lessThan(100);
-          }
-
-          receivedFrames++;
+          receivedFrames.push(Buffer.from(data));
         }
-        if (receivedFrames === expectedFrames) {
+        if (receivedFrames.length === numFrames) {
           clearTimeout(timeout);
           resolve();
-          return;
         }
       });
     });
 
-    // Start replaying the recording
-    setTimeout(() => {
-      flexDevice.replayRecording(recordingPath, false).catch((err) => {
-        console.error("Error replaying recording:", err);
-      });
-    }, 0);
+    // Send the synthetic serial data to the device
+    for (let i = 0; i < numFrames; i++) {
+      flexV4Device.serialPort.write(generateFlexSerialFrame(i, 8));
+    }
 
     // Wait for data to be received
     await expectData;
 
-    // Verify we received data
-    expect(receivedFrames).to.be.equal(expectedFrames);
+    // Verify we received the correct number of frames
+    expect(receivedFrames.length).to.be.equal(numFrames);
+
+    // Check each frame's content
+    // The driver forwards the sample data (without headers) in 8-bit mode:
+    // 3 bytes per sample: row, col, pressure
+    for (let frameIdx = 0; frameIdx < numFrames; frameIdx++) {
+      const frame = receivedFrames[frameIdx];
+
+      // Each frame should have 2 samples * 3 bytes = 6 bytes
+      expect(frame.length).to.be.equal(6);
+
+      // Sample 1: (frameIdx, 1, frameIdx*2+1)
+      expect(frame[0]).to.be.equal(frameIdx);   // row
+      expect(frame[1]).to.be.equal(1);           // col
+      expect(frame[2]).to.be.equal(frameIdx * 2 + 1); // pressure
+
+      // Sample 2: (1, frameIdx, frameIdx*3+1)
+      expect(frame[3]).to.be.equal(1);           // row
+      expect(frame[4]).to.be.equal(frameIdx);    // col
+      expect(frame[5]).to.be.equal(frameIdx * 3 + 1); // pressure
+    }
+
+    // Clean up
+    flexV4Device.serialPort.close();
+  });
+
+  it("Flex v5: can receive 12-bit synthetic data via WebSocket", async function () {
+    this.timeout(10000);
+
+    // Create V5 device (bcdDevice > 0x0277)
+    const flexV5Device = new VirtualDevice({
+      idVendor: "16c0",
+      manufacturer: "Teensyduino",
+      bcdDevice: "0278",
+    });
+    await flexV5Device.initialize();
+
+    // Connect flex endpoint client
+    const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
+
+    const deviceConnected = expectBroadcast(flexWS, (msg) => {
+      expect(msg.message.address).to.be.equal(flexV5Device.address);
+    });
+
+    // Track commands received from driver to know when mode switch is complete
+    const modeSwitchDone = new Promise((resolve) => {
+      let modeSwitchComplete = false;
+      let seenUM = false;
+      flexV5Device.serialPort.on("data", (data) => {
+        const str = data.toString();
+        // After mode switch, driver sends UM\n then S\n
+        if (str.includes("UM")) {
+          seenUM = true;
+        }
+        // When we see S\n after UM, the mode switch is complete
+        if (seenUM && str.includes("S\n") && !modeSwitchComplete) {
+          modeSwitchComplete = true;
+          resolve();
+        }
+      });
+    });
+
+    // Register virtual device with driver
+    await flexV5Device.registerWithDriver("http://127.0.0.1:8382");
+    await deviceConnected;
+
+    // Switch to 12-bit mode by sending UM\n command
+    const switchTo12BitCmd = Buffer.from("UM\n");
+    flexWS.send(switchTo12BitCmd);
+
+    // Send dummy data to unblock the old reader (it's blocking on ReadByte)
+    // NOTE: this is theoretical bug in the driver, but this happens only in the
+    // synthetic setup and there's no point patching to-be-legacy device
+    // corner-cases at this point
+    await wait(50);
+    flexV5Device.serialPort.write(Buffer.from([0x00]));
+
+    // Wait for driver to complete mode switch (sends UM\n then S\n)
+    await modeSwitchDone;
+
+    // Generate synthetic frames
+    const numFrames = 24;
+
+    // Set up promise to collect WebSocket data
+    const receivedFrames = [];
+    const expectData = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (receivedFrames.length === 0) {
+          reject(new Error("No data received within timeout"));
+        } else if (receivedFrames.length < numFrames) {
+          reject(
+            new Error(
+              `Expected ${numFrames} frames, got: ${receivedFrames.length}`
+            )
+          );
+        }
+      }, 8000);
+
+      flexWS.on("message", function message(data, isBinary) {
+        if (isBinary) {
+          receivedFrames.push(Buffer.from(data));
+        }
+        if (receivedFrames.length === numFrames) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    });
+
+    // Send the synthetic serial data to the device
+    for (let i = 0; i < numFrames; i++) {
+      flexV5Device.serialPort.write(generateFlexSerialFrame(i, 12));
+    }
+
+    // Wait for data to be received
+    await expectData;
+
+    // Verify we received the correct number of frames
+    expect(receivedFrames.length).to.be.equal(numFrames);
+
+    // Check each frame's content
+    // The driver forwards the sample data (without headers) in 12-bit mode:
+    // 4 bytes per sample: row, col, pressure_msb, pressure_lsb
+    for (let frameIdx = 0; frameIdx < numFrames; frameIdx++) {
+      const frame = receivedFrames[frameIdx];
+
+      // Each frame should have 2 samples * 4 bytes = 8 bytes
+      expect(frame.length).to.be.equal(8);
+
+      // Sample 1: (frameIdx, 1, frameIdx*2+1)
+      expect(frame[0]).to.be.equal(frameIdx);   // row
+      expect(frame[1]).to.be.equal(1);           // col
+      const pressure1 = frame.readUInt16BE(2);
+      expect(pressure1).to.be.equal(frameIdx * 2 + 1);
+
+      // Sample 2: (1, frameIdx, frameIdx*3+1)
+      expect(frame[4]).to.be.equal(1);           // row
+      expect(frame[5]).to.be.equal(frameIdx);    // col
+      const pressure2 = frame.readUInt16BE(6);
+      expect(pressure2).to.be.equal(frameIdx * 3 + 1);
+    }
+
+    // Clean up
+    flexV5Device.serialPort.close();
   });
 
 });
