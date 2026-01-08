@@ -13,7 +13,7 @@ import (
 
 const (
 	HEADER_START_MARKER = 0xFF
-	HEADER_SIZE = 4
+	HEADER_SIZE         = 4
 )
 
 type SensitronicsReader struct{}
