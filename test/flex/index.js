@@ -3,7 +3,11 @@ const { wait, startDriver, connectWS, expectEvent } = require("../utils");
 const expect = require("chai").expect;
 const VirtualDevice = require("./mock/VirtualDevice");
 const path = require("path");
-const { generateFlexSerialFrame } = require("./helpers");
+const {
+  generateFlexSerialFrame,
+  generateRandomSensitronicsFrame,
+  splitBufferRandomly,
+} = require("./helpers");
 
 function expectMessageType(ws, msgType) {
     return expectEvent(ws, "message", (s) => {
@@ -495,6 +499,104 @@ describe("Basic Flex functionality with Passthru device", () => {
 
     // Clean up
     flexV5Device.serialPort.close();
+  });
+
+  it("Sensitronics: driver starts send command, chunks frames", async function () {
+    this.timeout(10000);
+
+    // Create Sensitronics device
+    const sensitronicsDevice = new VirtualDevice({
+      idVendor: "16c0",
+      idProduct: "0483",
+      manufacturer: "Sensitronics",
+      product: "Dividat16x16",
+    });
+    await sensitronicsDevice.initialize();
+
+    // Connect flex endpoint client
+    const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
+
+    const deviceConnected = expectBroadcast(flexWS, (msg) => {
+      expect(msg.message.address).to.be.equal(sensitronicsDevice.address);
+    });
+
+    // Wait for driver to send start measurement command
+    const startCmdReceived = new Promise((resolve) => {
+      sensitronicsDevice.serialPort.on("data", (data) => {
+        const str = data.toString();
+        if (str.includes("S\n")) {
+          resolve();
+        }
+      });
+    });
+
+    // Register virtual device with driver
+    await sensitronicsDevice.registerWithDriver("http://127.0.0.1:8382");
+    await deviceConnected;
+
+    // Wait for driver to be ready to receive data
+    await startCmdReceived;
+
+    // Generate random frames
+    const numFrames = 24;
+    const generatedFrames = [];
+    for (let i = 0; i < numFrames; i++) {
+      generatedFrames.push(generateRandomSensitronicsFrame(50));
+    }
+
+    // Concatenate all frames into one buffer
+    const allFramesBuffer = Buffer.concat(generatedFrames);
+
+    // Split the buffer into random chunks to simulate fragmented transmission
+    const chunks = splitBufferRandomly(allFramesBuffer, 1, 15);
+
+    // Set up promise to collect WebSocket data
+    const receivedFrames = [];
+    const expectData = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (receivedFrames.length === 0) {
+          reject(new Error("No data received within timeout"));
+        } else if (receivedFrames.length < numFrames) {
+          reject(
+            new Error(
+              `Expected ${numFrames} frames, got: ${receivedFrames.length}`
+            )
+          );
+        }
+      }, 8000);
+
+      flexWS.on("message", function message(data, isBinary) {
+        if (isBinary) {
+          receivedFrames.push(Buffer.from(data));
+        }
+        if (receivedFrames.length === numFrames) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    });
+
+    // Send the chunks with small delays to simulate real transmission
+    for (const chunk of chunks) {
+      sensitronicsDevice.serialPort.write(chunk);
+    }
+
+    // Wait for data to be received
+    await expectData;
+
+    // Verify we received the correct number of frames
+    expect(receivedFrames.length).to.be.equal(numFrames);
+
+    // Verify each received frame matches what we sent
+    for (let i = 0; i < numFrames; i++) {
+      expect(
+        receivedFrames[i].equals(generatedFrames[i]),
+        `Frame ${i} mismatch`
+      ).to.be.true;
+    }
+
+    // Clean up
+    sensitronicsDevice.serialPort.close();
   });
 
 });
