@@ -159,12 +159,12 @@ func (backend *DeviceBackend) connectInternal(device websocket.UsbDeviceInfo) er
 		backend.broker.TryPub(data, brokerTopicRx)
 	}
 
-	backend.log.WithField("path", device.Path).Info("Attempting to open serial port.")
 	port, err := backend.openSerial(device.Path)
 	if err != nil {
 		backend.log.WithField("path", device.Path).WithField("error", err).Info("Failed to open connection to serial port.")
 		return err
 	}
+	backend.log.WithField("path", device.Path).Info("Opened serial port.")
 	reader := deviceToReader(device)
 	// should not happen
 	if reader == nil {
