@@ -8,12 +8,10 @@ import (
 	"io"
 
 	"github.com/dividat/driver/src/dividat-driver/firmware"
-	// TODO: don't leak command protocol
 	"github.com/dividat/driver/src/dividat-driver/util/websocket"
 )
 
 // Disconnect from current connection
-// TODO: don't leak command protocol
 func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command websocket.UpdateFirmware, send websocket.SendMsg) {
 	backend.log.Info("Processing firmware update request.")
 	backend.firmwareUpdate.SetUpdating(true)
