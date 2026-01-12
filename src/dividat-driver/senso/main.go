@@ -121,7 +121,6 @@ func (backend *DeviceBackend) Connect(address string) {
 		backend.broker.TryPub(data, brokerTopicRx)
 	}
 
-	// TODO: noTx??
 	go connectTCP(ctx, backend.log.WithField("channel", "data"), address+":55568", backend.broker.Sub("noTx"), onReceive)
 	time.Sleep(1000 * time.Millisecond)
 	go connectTCP(ctx, backend.log.WithField("channel", "control"), address+":55567", backend.broker.Sub(brokerTopicTx), onReceive)
