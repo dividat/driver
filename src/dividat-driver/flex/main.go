@@ -172,24 +172,23 @@ func (backend *DeviceBackend) connectInternal(device websocket.UsbDeviceInfo) er
 		port.Close()
 		return err
 	}
-
 	backend.currentDevice = &device
 
-	// TODO: replace this with context.AfterFunc
-	backend.cancelCurrentConnection = func() {
+	_ = context.AfterFunc(ctx, func() {
 		backend.log.Debug("Cancelling the current connection.")
-		cancel()
 		port.Close()
 		backend.currentDevice = nil
 		backend.cancelCurrentConnection = nil
 		backend.broadcastStatusUpdate()
-	}
+	})
+	backend.cancelCurrentConnection = cancel
+
 	backend.broadcastStatusUpdate()
 
 	tx := backend.broker.Sub(brokerTopicTx)
 
 	go func() {
-		defer backend.cancelCurrentConnection()
+		defer cancel()
 		reader.ReadFromSerial(ctx, backend.log, port, tx, onReceive)
 	}()
 
