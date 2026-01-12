@@ -202,8 +202,20 @@ The Senso replayer will appear as a Senso network device, so both driver and rep
 
 #### Senso Flex replay
 
-The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer.
+The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer and also allows to fake device metadata.
 
-It mocks the driver with respect to the `/flex` WebSocket resource and the `/` metadata HTTP route, so the real driver can not be running at the same time.
+Flex replay works by creating a mock serial device (using
+`test/flex/mock/VirtualDevice.js`) and registering it in the Driver.
 
-You can control the mocked driver version via the `--driver-version` flag.
+Driver must be running in test mode to allow mock device registration:
+
+    ./bin/dividat-driver -test-mode
+
+You can then replay a recording using:
+
+    node tools/replay-flex -d <device> recording.dat
+
+If you are using a WebSocket stream recording (e.g. legacy recordings), you
+should also specify `--passthru` mode (see above on recording Senso Flex data).
+
+See `node tools/replay-flex --help` for additional details.
