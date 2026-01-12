@@ -228,7 +228,6 @@ func (backend *DeviceBackend) enableAutoConnect() {
 }
 
 func (backend *DeviceBackend) backgroundScan(ctx context.Context) {
-	// TODO: replace with udev on Linux at least?
 	ticker := time.NewTicker(backgroundScanIntervalSeconds * time.Second)
 	defer func() {
 		backend.log.Info("Stopping background scan and auto-connect")
