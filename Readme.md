@@ -142,7 +142,7 @@ on macOS, use method 3 to record the /flex stream or some form of method 1.
 
 2. Recording serial data by spying on driver's reads using `strace`:
 
-        ./tools/record-flex-serial -o recording.dat
+        ./tools/record-flex-serial -o recording.serial.dat
 
    By default, the script will attach to `pidof dividat-driver` and spy on reads
    from `/dev/ttyACM0`, but you can override it with `-p` and `-d` flags. See
@@ -155,7 +155,9 @@ on macOS, use method 3 to record the /flex stream or some form of method 1.
 
    To replay the data, use
 
-        node tools/replay-flex -d <device-type> recording.dat
+        node tools/replay-flex -d <device-type> recording.serial.dat
+
+   By convention, such recordings are suffixed with .<devicetype>.serial.dat
 
 3. Recording the websocket stream from `/flex`:
 
@@ -167,7 +169,7 @@ on macOS, use method 3 to record the /flex stream or some form of method 1.
    This data can be replayed using a special "passthru" mock device that
    pretends to be a different device to the client:
 
-        node tools/replay-flex -d passthru-<type> recording.dat
+        node tools/replay-flex -d passthru-<type> recording.ws.dat
 
    This method can be useful if:
    - You need to capture the exact output of the driver instead of the device
@@ -180,6 +182,7 @@ on macOS, use method 3 to record the /flex stream or some form of method 1.
    stream, but still replay as if it was recorded directly from the serial
    output (using `-d sensitronics`).
 
+   By convention, such recordings are suffixed with .<devicetype>.ws.dat
 
 ### Data replayer
 
