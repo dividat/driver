@@ -117,6 +117,7 @@ type SerialReader interface {
 	ReadFromSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte))
 }
 
+// Pick the appropriate reader for the device
 func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
 	if strings.HasPrefix(deviceInfo.Product, "PASSTHRU") {
 		return &passthru.PassthruReader{}
@@ -130,6 +131,9 @@ func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
 
 // maybeRenamePassthruPrefix returns a copy of the UsbDeviceInfo with the
 // "PASSTHRU-" prefix stripped from the Product field, if present.
+//
+// Allows to mock arbitrary device metadata while using the PassthruReader. Used
+// in tools/replay-flex.
 func maybeRenamePassthruPrefix(deviceInfo websocket.UsbDeviceInfo) websocket.UsbDeviceInfo {
 	const prefix = "PASSTHRU-"
 	deviceInfo.Product = strings.TrimPrefix(deviceInfo.Product, prefix)
