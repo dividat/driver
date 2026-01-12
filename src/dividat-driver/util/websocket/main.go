@@ -219,7 +219,6 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 	} else if command.Discover != nil {
 		entries := handle.DeviceBackend.Discover(command.Discover.Duration, ctx)
 
-		// TODO: the async interface makes little sense for Flex
 		go func(entries chan DeviceInfo) {
 			for entry := range entries {
 				log.WithField("service", entry).Debug("Discovered service.")
@@ -234,7 +233,6 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 
 			}
 			log.Debug("Discovery finished.")
-			// TODO: client needs to know it's finished too!
 		}(entries)
 
 		return nil
