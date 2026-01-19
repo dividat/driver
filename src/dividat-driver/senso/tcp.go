@@ -20,10 +20,18 @@ const maxInterval = 30 * time.Second
 type onReceive = func([]byte)
 
 // connectTCP creates a persistent tcp connection to address
-func connectTCP(ctx context.Context, baseLogger *logrus.Entry, address string, tx chan interface{}, onReceive onReceive) {
+// isOptional is used when connecting to the data channel, which is used only in legacy Senso firmware
+func connectTCP(ctx context.Context, baseLogger *logrus.Entry, address string, tx chan interface{}, onReceive onReceive, isOptional bool) {
 	var dialer net.Dialer
 
 	var log = baseLogger.WithField("address", address)
+
+	var connectionAttemptLogLevel logrus.Level
+	if isOptional {
+		connectionAttemptLogLevel = logrus.DebugLevel
+	} else {
+		connectionAttemptLogLevel = logrus.InfoLevel
+	}
 
 	var conn net.Conn
 	dialTCP := func() error {
@@ -34,11 +42,11 @@ func connectTCP(ctx context.Context, baseLogger *logrus.Entry, address string, t
 			conn.Close()
 		}
 
-		log.Info("Dialing TCP connection.")
+		log.Log(connectionAttemptLogLevel, "Dialing TCP connection.")
 		conn, connErr = dialer.DialContext(ctx, "tcp", address)
 
 		if connErr != nil {
-			log.WithError(connErr).Info("Could not connect with Senso.")
+			log.WithError(connErr).Log(connectionAttemptLogLevel, "Could not connect with Senso.")
 		}
 		return connErr
 	}
