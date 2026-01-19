@@ -72,9 +72,9 @@ func (handle *Handle) Connect(address string) {
 		handle.broker.TryPub(data, "rx")
 	}
 
-	go connectTCP(ctx, handle.log.WithField("channel", "data"), address+":55568", handle.broker.Sub("noTx"), onReceive)
+	go connectTCP(ctx, handle.log.WithField("channel", "data"), address+":55568", handle.broker.Sub("noTx"), onReceive, true)
 	time.Sleep(1000 * time.Millisecond)
-	go connectTCP(ctx, handle.log.WithField("channel", "control"), address+":55567", handle.broker.Sub("tx"), onReceive)
+	go connectTCP(ctx, handle.log.WithField("channel", "control"), address+":55567", handle.broker.Sub("tx"), onReceive, false)
 
 	handle.cancelCurrentConnection = cancel
 }

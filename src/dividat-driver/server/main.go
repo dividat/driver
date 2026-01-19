@@ -37,12 +37,6 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 		baseLog.WithError(err).Panic("Could not get system information.")
 	}
 
-	baseLog = baseLog.WithFields(logrus.Fields{
-		"machineId": systemInfo.MachineId,
-		"os":        systemInfo.Os,
-		"arch":      systemInfo.Arch,
-	})
-
 	baseLog.Info("Dividat Driver starting")
 
 	// Setup log endpoint
@@ -67,9 +61,6 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 
 	// Create a logger for server
 	log := baseLog.WithField("package", "server")
-
-	// Start the monitor
-	go startMonitor(baseLog.WithField("package", "monitor"))
 
 	// Setup HTTP Server
 	server := http.Server{Addr: "127.0.0.1:" + serverPort}
