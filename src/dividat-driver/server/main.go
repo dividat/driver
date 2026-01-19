@@ -66,9 +66,6 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 	// Create a logger for server
 	log := baseLog.WithField("package", "server")
 
-	// Start the monitor
-	go startMonitor(baseLog.WithField("package", "monitor"))
-
 	// Setup HTTP Server
 	server := http.Server{Addr: "127.0.0.1:" + serverPort}
 
