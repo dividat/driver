@@ -29,4 +29,4 @@ require (
 	golang.org/x/sys v0.19.0 // indirect
 )
 
-replace go.bug.st/serial => github.com/yfyf/go-serial v1.6.4-withusbmetadata2
+replace go.bug.st/serial => github.com/dividat/go-serial v0.0.0-20260119115530-3b1f0158c46b
