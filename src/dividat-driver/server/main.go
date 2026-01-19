@@ -38,12 +38,6 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 		baseLog.WithError(err).Panic("Could not get system information.")
 	}
 
-	baseLog = baseLog.WithFields(logrus.Fields{
-		"machineId": systemInfo.MachineId,
-		"os":        systemInfo.Os,
-		"arch":      systemInfo.Arch,
-	})
-
 	baseLog.Info("Dividat Driver starting")
 
 	// Setup log endpoint
