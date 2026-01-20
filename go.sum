@@ -8,8 +8,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/denisbrodbeck/machineid v1.0.1 h1:geKr9qtkB876mXguW2X6TU4ZynleN6ezuMSRhl4D7AQ=
 github.com/denisbrodbeck/machineid v1.0.1/go.mod h1:dJUwb7PTidGDeYyUBmXZ2GphQBbjJCrnectwCyxcUSI=
-github.com/dividat/go-serial v0.0.0-20260119115530-3b1f0158c46b h1:XHUFA0D+i6tS+6yWBYP8GNXkGt8NsJkNyAywqMJoPLc=
-github.com/dividat/go-serial v0.0.0-20260119115530-3b1f0158c46b/go.mod h1:nofMJxTeNVny/m6+KaafC6vJGj3miwQZ6vW4BZUGJPI=
+github.com/dividat/go-serial v1.6.4-usbmetadata h1:U8b1GaZ1roUtf1Jve6sg+yuHdLe7FsBvZxnm1W7bipo=
+github.com/dividat/go-serial v1.6.4-usbmetadata/go.mod h1:nofMJxTeNVny/m6+KaafC6vJGj3miwQZ6vW4BZUGJPI=
 github.com/ebfe/scard v0.0.0-20190212122703-c3d1b1916a95 h1:OM0MnUcXBysj7ZtXvThVWHMoahuKQ8FuwIdeSLcNdP4=
 github.com/ebfe/scard v0.0.0-20190212122703-c3d1b1916a95/go.mod h1:8hHvF8DlEq5kE3KWOsZQezdWq1OTOVxZArZMscS954E=
 github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
