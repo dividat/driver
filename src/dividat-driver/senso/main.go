@@ -12,7 +12,7 @@ import (
 	"github.com/dividat/driver/src/dividat-driver/firmware"
 	"github.com/dividat/driver/src/dividat-driver/protocol"
 	"github.com/dividat/driver/src/dividat-driver/service"
-	"github.com/dividat/driver/src/dividat-driver/util/websocket"
+	"github.com/dividat/driver/src/dividat-driver/websocket"
 )
 
 // pubsub topic names, must be unique

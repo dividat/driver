@@ -32,7 +32,7 @@ import (
 	"github.com/dividat/driver/src/dividat-driver/flex/enumerator"
 	"github.com/dividat/driver/src/dividat-driver/protocol"
 	"github.com/dividat/driver/src/dividat-driver/util"
-	"github.com/dividat/driver/src/dividat-driver/util/websocket"
+	"github.com/dividat/driver/src/dividat-driver/websocket"
 )
 
 // how often to look for Flex devices while there are clients and no devices are

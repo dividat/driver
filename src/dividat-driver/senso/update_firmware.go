@@ -9,7 +9,7 @@ import (
 
 	"github.com/dividat/driver/src/dividat-driver/firmware"
 	"github.com/dividat/driver/src/dividat-driver/protocol"
-	"github.com/dividat/driver/src/dividat-driver/util/websocket"
+	"github.com/dividat/driver/src/dividat-driver/websocket"
 )
 
 // Disconnect from current connection
