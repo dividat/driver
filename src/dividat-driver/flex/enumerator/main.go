@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	serial_enumerator "go.bug.st/serial/enumerator"
+	serialenum "go.bug.st/serial/enumerator"
 
 	"github.com/dividat/driver/src/dividat-driver/util/websocket"
 )
@@ -15,7 +15,7 @@ type DeviceEnumerator struct {
 	ctx                   context.Context
 	log                   *logrus.Entry
 	testMode              bool
-	registeredMockDevices map[MockDeviceId]*serial_enumerator.PortDetails
+	registeredMockDevices map[MockDeviceId]*serialenum.PortDetails
 }
 
 func New(ctx context.Context, log *logrus.Entry, testMode bool) *DeviceEnumerator {
@@ -23,13 +23,13 @@ func New(ctx context.Context, log *logrus.Entry, testMode bool) *DeviceEnumerato
 		ctx:                   ctx,
 		log:                   log,
 		testMode:              testMode,
-		registeredMockDevices: make(map[MockDeviceId]*serial_enumerator.PortDetails),
+		registeredMockDevices: make(map[MockDeviceId]*serialenum.PortDetails),
 	}
 }
 
-func (handle *DeviceEnumerator) getSerialPortList() ([]*serial_enumerator.PortDetails, error) {
+func (handle *DeviceEnumerator) getSerialPortList() ([]*serialenum.PortDetails, error) {
 	// run even in testMode for a pseudo-test that enumeration works at all
-	ports, err := serial_enumerator.GetDetailedPortsList()
+	ports, err := serialenum.GetDetailedPortsList()
 	if err != nil {
 		return nil, err
 	}
@@ -72,13 +72,13 @@ func (handle *DeviceEnumerator) ListMatchingDevices() []websocket.UsbDeviceInfo 
 // Vendor IDs:
 //
 //	16C0 - Van Ooijen Technische Informatica (Teensy)
-func isFlexLike(port serial_enumerator.PortDetails) bool {
+func isFlexLike(port serialenum.PortDetails) bool {
 	vendorId := strings.ToUpper(port.VID)
 
 	return vendorId == "16C0"
 }
 
-func portDetailsToDeviceInfo(port serial_enumerator.PortDetails) (*websocket.UsbDeviceInfo, error) {
+func portDetailsToDeviceInfo(port serialenum.PortDetails) (*websocket.UsbDeviceInfo, error) {
 	idVendor, err := strconv.ParseUint(port.VID, 16, 16) // hex, uint16
 	if err != nil {
 		return nil, err
