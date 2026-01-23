@@ -81,8 +81,8 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	// send JSON data up the WebSocket
-	sendGeneric := func(message []byte) error {
+	// send serialized JSON data up the WebSocket as a text message
+	sendText := func(message []byte) error {
 		writeMutex.Lock()
 		conn.SetWriteDeadline(time.Now().Add(50 * time.Millisecond))
 		err := conn.WriteMessage(websocket.TextMessage, message)
@@ -101,7 +101,7 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		return sendGeneric(msg)
+		return sendText(msg)
 	}
 
 	sendBroadcast := func(broadcast Broadcast) error {
@@ -109,7 +109,7 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		return sendGeneric(msg)
+		return sendText(msg)
 	}
 
 	handle.DeviceBackend.RegisterSubscriber(r)
