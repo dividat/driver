@@ -47,7 +47,7 @@ func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan w
 	deviceChan := make(chan websocket.DeviceInfo)
 	go func() {
 		for service := range service.Scan(discoveryCtx) {
-			device := websocket.DeviceInfo{TcpDeviceInfo: &service.ServiceEntry}
+			device := websocket.MakeDeviceInfoTcp(service.ServiceEntry)
 			deviceChan <- device
 		}
 		close(deviceChan)

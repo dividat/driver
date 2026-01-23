@@ -103,7 +103,7 @@ describe("Flex functionality", () => {
       // Drive should not auto-connect since manual-connect is specified
       await expectStatusReply(flexWS, (statusAfterRegistration) => {
           expect(statusAfterRegistration.address).to.be.null;
-          expect(statusAfterRegistration.deviceInfo).to.be.null;
+          expect(statusAfterRegistration.device).to.be.null;
       });
 
       // Send command to connect to the virtual device
@@ -114,7 +114,8 @@ describe("Flex functionality", () => {
       sendCmd(flexWS, cmd);
       await expectStatusReply(flexWS, (statusAfterConnect) => {
           expect(statusAfterConnect.address).to.be.equal(virtualDevice.address);
-          expect(statusAfterConnect.deviceInfo.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
+          expect(statusAfterConnect.device.deviceType).to.be.equal("flex");
+          expect(statusAfterConnect.device.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
       });
     });
 
@@ -156,7 +157,7 @@ describe("Flex functionality", () => {
       expect(devices).to.have.length(2);
 
       const receivedFields = devices.map((d) => {
-          return { path: d.usbDevice.path, product: d.usbDevice.product }
+          return { path: d.device.usbDevice.path, product: d.device.usbDevice.product }
       });
       const actualFields = [virtualDevice1, virtualDevice2].map((d) => {
           return { path: d.address, product: d.product }
@@ -193,14 +194,14 @@ describe("Flex functionality", () => {
       for (const ws of clients) {
           await expectStatusReply(ws, (statusInitial) => {
               expect(statusInitial.address).to.be.null;
-              expect(statusInitial.deviceInfo).to.be.null;
+              expect(statusInitial.device).to.be.null;
           });
       };
 
       const broadcast1 = expectBroadcast(flexWS1, (broadcast) => {
           expect(broadcast.message.type).to.be.equal("Status");
           expect(broadcast.message.address).to.be.equal(virtualDevice.address);
-          expect(broadcast.message.deviceInfo.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
+          expect(broadcast.message.device.usbDevice.serialNumber).to.be.equal(virtualDevice.serialNumber);
           return broadcast
       });
       const broadcast2 = expectBroadcast(flexWS2, (b) => { return b });
@@ -221,7 +222,7 @@ describe("Flex functionality", () => {
       const disconnectBroadcast1 = expectBroadcast(flexWS1, (broadcast) => {
           expect(broadcast.message.type).to.be.equal("Status");
           expect(broadcast.message.address).to.be.null;
-          expect(broadcast.message.deviceInfo).to.be.null;
+          expect(broadcast.message.device).to.be.null;
           return broadcast
       });
       const disconnectBroadcast2 = expectBroadcast(flexWS2, (b) => { return b });
@@ -298,7 +299,7 @@ describe("Flex functionality", () => {
     it("present PASSTHRU-<foo> as <foo> device to client", async function () {
       await expectStatusReply(flexWS, (status) => {
           expect(status.address).to.be.equal(virtualDevice.address);
-          expect(status.deviceInfo.usbDevice.product).to.be.equal("PretendFlex");
+          expect(status.device.usbDevice.product).to.be.equal("PretendFlex");
       });
     });
   });

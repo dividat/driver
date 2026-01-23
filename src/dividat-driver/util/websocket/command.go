@@ -122,9 +122,44 @@ type Message struct {
 	FirmwareUpdateMessage *FirmwareUpdateMessage
 }
 
+type DeviceType string
+
+const (
+	DeviceTypeSenso DeviceType = "senso"
+	DeviceTypeFlex  DeviceType = "flex"
+)
+
 type DeviceInfo struct {
-	TcpDeviceInfo *zeroconf.ServiceEntry `json:"tcpDevice"`
-	UsbDeviceInfo *UsbDeviceInfo         `json:"usbDevice"`
+	deviceType    DeviceType
+	tcpDeviceInfo *zeroconf.ServiceEntry // present if DeviceType == senso
+	usbDeviceInfo *UsbDeviceInfo         // present if DeviceType == flex
+}
+
+func MakeDeviceInfoUsb(usbInfo UsbDeviceInfo) DeviceInfo {
+	return DeviceInfo{
+		deviceType:    DeviceTypeFlex,
+		usbDeviceInfo: &usbInfo,
+	}
+}
+
+func MakeDeviceInfoTcp(tcpInfo zeroconf.ServiceEntry) DeviceInfo {
+	return DeviceInfo{
+		deviceType:    DeviceTypeSenso,
+		tcpDeviceInfo: &tcpInfo,
+	}
+}
+
+// hand-rolled marshalling, because encode/json does not deal with unexported fields
+func (d DeviceInfo) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		DeviceType    DeviceType             `json:"deviceType"`
+		TcpDeviceInfo *zeroconf.ServiceEntry `json:"tcpDevice,omitempty"`
+		UsbDeviceInfo *UsbDeviceInfo         `json:"usbDevice,omitempty"`
+	}{
+		DeviceType:    d.deviceType,
+		TcpDeviceInfo: d.tcpDeviceInfo,
+		UsbDeviceInfo: d.usbDeviceInfo,
+	})
 }
 
 type UsbDeviceInfo struct {
@@ -159,7 +194,7 @@ func (message *Message) MarshalJSON() ([]byte, error) {
 		status := struct {
 			Type       string      `json:"type"`
 			Address    *string     `json:"address"`
-			DeviceInfo *DeviceInfo `json:"deviceInfo"`
+			DeviceInfo *DeviceInfo `json:"device"`
 		}{
 			Type:       "Status",
 			Address:    message.Status.Address,
@@ -168,18 +203,18 @@ func (message *Message) MarshalJSON() ([]byte, error) {
 		return json.Marshal(&status)
 
 	} else if message.Discovered != nil {
-		serviceEntry := message.Discovered.TcpDeviceInfo
+		serviceEntry := message.Discovered.tcpDeviceInfo
 		msg := struct {
 			Type string `json:"type"`
-			// Senso only
+			// Senso only, duplicated for backwards compat
 			ServiceEntry *zeroconf.ServiceEntry `json:"service"`
 			IP           []net.IP               `json:"ip"`
-			// Flex only
-			UsbDevice *UsbDeviceInfo `json:"usbDevice"`
+			// New protocol
+			DeviceInfo *DeviceInfo `json:"device"`
 		}{
 			Type:         "Discovered",
 			ServiceEntry: serviceEntry,
-			UsbDevice:    message.Discovered.UsbDeviceInfo,
+			DeviceInfo:   message.Discovered,
 		}
 		if serviceEntry != nil {
 			msg.IP = append(serviceEntry.AddrIPv4, serviceEntry.AddrIPv6...)

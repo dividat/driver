@@ -293,8 +293,8 @@ func (backend *DeviceBackend) GetStatus() websocket.Status {
 
 	if backend.currentDevice != nil {
 		status.Address = &backend.currentDevice.Path
-		renamed := concealPassthruDevice(*backend.currentDevice)
-		status.DeviceInfo = &websocket.DeviceInfo{UsbDeviceInfo: &renamed}
+		newDeviceInfo := websocket.MakeDeviceInfoUsb(concealPassthruDevice(*backend.currentDevice))
+		status.DeviceInfo = &newDeviceInfo
 	}
 	return status
 }
@@ -344,7 +344,7 @@ func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan w
 			}
 
 			usbDevice := concealPassthruDevice(usbDevice)
-			device := websocket.DeviceInfo{UsbDeviceInfo: &usbDevice}
+			device := websocket.MakeDeviceInfoUsb(usbDevice)
 
 			devices <- device
 		}
