@@ -120,69 +120,20 @@ Data from Senso can be recorded using the [`recorder`](src/dividat-driver/record
 
 #### Senso Flex data
 
-**Short version**: on Linux, record the raw serial data using method 2 explained
-below:
-
-        ./tools/record-flex-serial -o recording.dat
-
-on macOS, use method 3 to record the /flex stream or some form of method 1.
-
-**Long version**: there are 3 ways to record Senso Flex data:
-
-1. Reading data directly from the serial device, e.g.
-
-        socat stdio /dev/ttyACM0 > recording.dat
-
-   However, this means you cannot run the driver and thus cannot interact with
-   the device. In particular, any setup commands would have to be either
-   executed manually or prior to starting the recording.
-
-   Not recommended and not supported for replay. timestamping+base64 left as an
-   exercise.
-
-2. Recording serial data by spying on driver's reads using `strace`:
+On Linux, you can record the raw serial data using:
 
         ./tools/record-flex-serial -o recording.serial.dat
 
-   By default, the script will attach to `pidof dividat-driver` and spy on reads
-   from `/dev/ttyACM0`, but you can override it with `-p` and `-d` flags. See
-   `./tools/record-flex-serial --help` for details.
+On macOS, you can only record the WebSocket binary data from the `/flex`
+endpoint as output by the Driver, using:
 
-   This records serial data that can be then be used to do end-to-end replays
-   (that involve the driver's processing).
+        make record-flex > recording.ws.dat
 
-   This method only works on Linux.
+For Flex V6 (Sensitronics) devices, the two methods should be equivalent.
 
-   To replay the data, use
+The Driver must be running and connected to the device in both cases.
 
-        node tools/replay-flex -d <device-type> recording.serial.dat
-
-   By convention, such recordings are suffixed with .<devicetype>.serial.dat
-
-3. Recording the websocket stream from `/flex`:
-
-   This records the processed output as produced by the driver, using the same
-   mechanism as for the Senso.
-
-        make record-flex > recording.dat
-
-   This data can be replayed using a special "passthru" mock device that
-   pretends to be a different device to the client:
-
-        node tools/replay-flex -d passthru-<type> recording.ws.dat
-
-   This method can be useful if:
-   - You need to capture the exact output of the driver instead of the device
-     (e.g. for diff'ing)
-   - You cannot use `strace` for recording (e.g. on macOS)
-
-   Note: for `sensitronics` devices, the driver outputs identical bytes to the
-   serial data read, just chunked/framed (i.e. `concat(serial out) ==
-   concat(WS binary stream)`). This means you can record the websocket
-   stream, but still replay as if it was recorded directly from the serial
-   output (using `-d sensitronics`).
-
-   By convention, such recordings are suffixed with .<devicetype>.ws.dat
+For more details, see the [Flex recording and replay](tools/flex-recording-and-replay.md) docs.
 
 ### Data replayer
 
@@ -204,9 +155,6 @@ The Senso replayer will appear as a Senso network device, so both driver and rep
 
 The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer and also allows to fake device metadata.
 
-Flex replay works by creating a mock serial device (using
-`test/flex/mock/VirtualDevice.js`) and registering it in the Driver.
-
 Driver must be running in test mode to allow mock device registration:
 
     ./bin/dividat-driver -test-mode
@@ -215,7 +163,7 @@ You can then replay a recording using:
 
     node tools/replay-flex -d <device> recording.dat
 
-If you are using a WebSocket stream recording (e.g. legacy recordings), you
-should also specify `--passthru` mode (see above on recording Senso Flex data).
+If you are using a WebSocket binary stream recording, you should also specify
+`--passthru` mode.
 
-See `node tools/replay-flex --help` for additional details.
+For more details, see the [Flex recording and replay](tools/flex-recording-and-replay.md) docs.
