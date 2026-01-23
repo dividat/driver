@@ -26,10 +26,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.bug.st/serial"
 
+	"github.com/dividat/driver/src/dividat-driver/flex/device/passthru"
+	"github.com/dividat/driver/src/dividat-driver/flex/device/sensingtex"
+	"github.com/dividat/driver/src/dividat-driver/flex/device/sensitronics"
 	"github.com/dividat/driver/src/dividat-driver/flex/enumerator"
-	"github.com/dividat/driver/src/dividat-driver/flex/passthru"
-	"github.com/dividat/driver/src/dividat-driver/flex/sensingtex"
-	"github.com/dividat/driver/src/dividat-driver/flex/sensitronics"
 	"github.com/dividat/driver/src/dividat-driver/util"
 	"github.com/dividat/driver/src/dividat-driver/util/websocket"
 )
