@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dividat/driver/src/dividat-driver/flex"
-	flex_enumerator "github.com/dividat/driver/src/dividat-driver/flex/enumerator"
+	flexenum "github.com/dividat/driver/src/dividat-driver/flex/enumerator"
 	"github.com/dividat/driver/src/dividat-driver/logging"
 	"github.com/dividat/driver/src/dividat-driver/rfid"
 	"github.com/dividat/driver/src/dividat-driver/senso"
@@ -57,7 +57,7 @@ func Start(logger *logrus.Logger, origins []string, testMode bool) context.Cance
 	http.Handle("/senso", originMiddleware(origins, baseLog, sensoHandle))
 
 	// Setup Flex reader
-	flexEnumerator := flex_enumerator.New(ctx, baseLog.WithField("package", "flex.enumerator"), testMode)
+	flexEnumerator := flexenum.New(ctx, baseLog.WithField("package", "flex.enumerator"), testMode)
 	http.Handle("/flex/mock", http.RedirectHandler("/flex/mock/", http.StatusMovedPermanently))
 	http.Handle("/flex/mock/", http.StripPrefix("/flex/mock", flexEnumerator))
 	flexHandle := flex.New(ctx, baseLog.WithField("package", "flex"), flexEnumerator)
