@@ -8,11 +8,12 @@ import (
 	"io"
 
 	"github.com/dividat/driver/src/dividat-driver/firmware"
+	"github.com/dividat/driver/src/dividat-driver/protocol"
 	"github.com/dividat/driver/src/dividat-driver/util/websocket"
 )
 
 // Disconnect from current connection
-func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command websocket.UpdateFirmware, send websocket.SendMsg) {
+func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command protocol.UpdateFirmware, send websocket.SendMsg) {
 	backend.log.Info("Processing firmware update request.")
 	backend.firmwareUpdate.SetUpdating(true)
 

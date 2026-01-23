@@ -30,6 +30,7 @@ import (
 	"github.com/dividat/driver/src/dividat-driver/flex/device/sensingtex"
 	"github.com/dividat/driver/src/dividat-driver/flex/device/sensitronics"
 	"github.com/dividat/driver/src/dividat-driver/flex/enumerator"
+	"github.com/dividat/driver/src/dividat-driver/protocol"
 	"github.com/dividat/driver/src/dividat-driver/util"
 	"github.com/dividat/driver/src/dividat-driver/util/websocket"
 )
@@ -52,7 +53,7 @@ type DeviceBackend struct {
 	ctx context.Context
 	log *logrus.Entry
 
-	currentDevice *websocket.UsbDeviceInfo
+	currentDevice *protocol.UsbDeviceInfo
 
 	enumerator *enumerator.DeviceEnumerator
 
@@ -101,14 +102,14 @@ func New(ctx context.Context, log *logrus.Entry, enumerator *enumerator.DeviceEn
 	return &handle
 }
 
-func (backend *DeviceBackend) broadcastMessage(msg websocket.Message) {
-	broadcast := websocket.Broadcast{Message: msg}
+func (backend *DeviceBackend) broadcastMessage(msg protocol.Message) {
+	broadcast := protocol.Broadcast{Message: msg}
 	backend.broker.TryPub(broadcast, brokerTopicRxBroadcast)
 }
 
 func (backend *DeviceBackend) broadcastStatusUpdate() {
 	status := backend.GetStatus()
-	backend.broadcastMessage(websocket.Message{Status: &status})
+	backend.broadcastMessage(protocol.Message{Status: &status})
 }
 
 type SerialReader interface {
@@ -118,7 +119,7 @@ type SerialReader interface {
 }
 
 // Pick the appropriate reader for the device
-func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
+func deviceToReader(deviceInfo protocol.UsbDeviceInfo) SerialReader {
 	if strings.HasPrefix(deviceInfo.Product, "PASSTHRU") {
 		return &passthru.PassthruReader{}
 	} else if deviceInfo.Manufacturer == "Teensyduino" {
@@ -134,14 +135,14 @@ func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
 //
 // Allows to mock arbitrary device metadata while using the PassthruReader. Used
 // in tools/replay-flex.
-func concealPassthruDevice(deviceInfo websocket.UsbDeviceInfo) websocket.UsbDeviceInfo {
+func concealPassthruDevice(deviceInfo protocol.UsbDeviceInfo) protocol.UsbDeviceInfo {
 	const prefix = "PASSTHRU-"
 	deviceInfo.Product = strings.TrimPrefix(deviceInfo.Product, prefix)
 	return deviceInfo
 }
 
 // connect to a "validated" device
-func (backend *DeviceBackend) connectInternal(device websocket.UsbDeviceInfo) error {
+func (backend *DeviceBackend) connectInternal(device protocol.UsbDeviceInfo) error {
 	// Only allow one connection change at a time
 	backend.connectionChangeMutex.Lock()
 	defer backend.connectionChangeMutex.Unlock()
@@ -288,12 +289,12 @@ func (backend *DeviceBackend) DeregisterSubscriber(req *http.Request) {
 	}
 }
 
-func (backend *DeviceBackend) GetStatus() websocket.Status {
-	status := websocket.Status{}
+func (backend *DeviceBackend) GetStatus() protocol.Status {
+	status := protocol.Status{}
 
 	if backend.currentDevice != nil {
 		status.Address = &backend.currentDevice.Path
-		newDeviceInfo := websocket.MakeDeviceInfoUsb(concealPassthruDevice(*backend.currentDevice))
+		newDeviceInfo := protocol.MakeDeviceInfoUsb(concealPassthruDevice(*backend.currentDevice))
 		status.DeviceInfo = &newDeviceInfo
 	}
 	return status
@@ -301,7 +302,7 @@ func (backend *DeviceBackend) GetStatus() websocket.Status {
 
 // NOTE: The remaining Driver commands are not currently used in Play for Flex
 
-func (backend *DeviceBackend) lookupDeviceInfo(portName string) *websocket.UsbDeviceInfo {
+func (backend *DeviceBackend) lookupDeviceInfo(portName string) *protocol.UsbDeviceInfo {
 	devices := backend.enumerator.ListMatchingDevices()
 	for _, device := range devices {
 		if device.Path == portName {
@@ -332,11 +333,11 @@ func (backend *DeviceBackend) Disconnect() {
 }
 
 // Currently not used in Play
-func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan websocket.DeviceInfo {
+func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan protocol.DeviceInfo {
 	matching := backend.enumerator.ListMatchingDevices()
-	devices := make(chan websocket.DeviceInfo)
+	devices := make(chan protocol.DeviceInfo)
 
-	go func(usbDevices []websocket.UsbDeviceInfo) {
+	go func(usbDevices []protocol.UsbDeviceInfo) {
 		for _, usbDevice := range usbDevices {
 			// Terminate if we have been cancelled
 			if ctx.Err() != nil {
@@ -344,7 +345,7 @@ func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan w
 			}
 
 			usbDevice := concealPassthruDevice(usbDevice)
-			device := websocket.MakeDeviceInfoUsb(usbDevice)
+			device := protocol.MakeDeviceInfoUsb(usbDevice)
 
 			devices <- device
 		}
@@ -360,7 +361,7 @@ func (backend *DeviceBackend) IsUpdatingFirmware() bool {
 }
 
 // not supported
-func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command websocket.UpdateFirmware, send websocket.SendMsg) {
+func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command protocol.UpdateFirmware, send websocket.SendMsg) {
 	// noop
 	return
 }

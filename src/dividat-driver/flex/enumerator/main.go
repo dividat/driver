@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	serialenum "go.bug.st/serial/enumerator"
 
-	"github.com/dividat/driver/src/dividat-driver/util/websocket"
+	"github.com/dividat/driver/src/dividat-driver/protocol"
 )
 
 type DeviceEnumerator struct {
@@ -44,13 +44,13 @@ func (handle *DeviceEnumerator) getSerialPortList() ([]*serialenum.PortDetails, 
 	}
 }
 
-func (handle *DeviceEnumerator) ListMatchingDevices() []websocket.UsbDeviceInfo {
+func (handle *DeviceEnumerator) ListMatchingDevices() []protocol.UsbDeviceInfo {
 	ports, err := handle.getSerialPortList()
 	if err != nil {
 		handle.log.WithField("error", err).Info("Could not list serial devices.")
 		return nil
 	}
-	var matching []websocket.UsbDeviceInfo
+	var matching []protocol.UsbDeviceInfo
 	for _, port := range ports {
 		handle.log.WithField("name", port.Name).WithField("vendor", port.VID).Debug("Considering serial port.")
 
@@ -78,7 +78,7 @@ func isFlexLike(port serialenum.PortDetails) bool {
 	return vendorId == "16C0"
 }
 
-func portDetailsToDeviceInfo(port serialenum.PortDetails) (*websocket.UsbDeviceInfo, error) {
+func portDetailsToDeviceInfo(port serialenum.PortDetails) (*protocol.UsbDeviceInfo, error) {
 	idVendor, err := strconv.ParseUint(port.VID, 16, 16) // hex, uint16
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func portDetailsToDeviceInfo(port serialenum.PortDetails) (*websocket.UsbDeviceI
 		return nil, err
 	}
 
-	deviceInfo := websocket.UsbDeviceInfo{
+	deviceInfo := protocol.UsbDeviceInfo{
 		Path:         port.Name,
 		IdVendor:     uint16(idVendor),
 		IdProduct:    uint16(idProduct),

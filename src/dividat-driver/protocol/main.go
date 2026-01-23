@@ -1,4 +1,4 @@
-package websocket
+package protocol
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"github.com/libp2p/zeroconf/v2"
 )
 
-// WEBSOCKET PROTOCOL
+// DRIVER COMMAND PROTOCOL
 
 // Command sent by Play
 type Command struct {
@@ -21,7 +21,7 @@ type Command struct {
 	*UpdateFirmware
 }
 
-func prettyPrintCommand(command Command) string {
+func PrettyPrintCommand(command Command) string {
 	if command.GetStatus != nil {
 		return "GetStatus"
 	} else if command.Connect != nil {

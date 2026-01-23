@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dividat/driver/src/dividat-driver/firmware"
+	"github.com/dividat/driver/src/dividat-driver/protocol"
 	"github.com/dividat/driver/src/dividat-driver/service"
 	"github.com/dividat/driver/src/dividat-driver/util/websocket"
 )
@@ -41,13 +42,13 @@ func (backend *DeviceBackend) RegisterSubscriber(r *http.Request) {
 	return
 }
 
-func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan websocket.DeviceInfo {
+func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan protocol.DeviceInfo {
 	discoveryCtx, _ := context.WithTimeout(ctx, time.Duration(duration)*time.Second)
 	// map over the channel to wrap ServiceEntry into DeviceInfo
-	deviceChan := make(chan websocket.DeviceInfo)
+	deviceChan := make(chan protocol.DeviceInfo)
 	go func() {
 		for service := range service.Scan(discoveryCtx) {
-			device := websocket.MakeDeviceInfoTcp(service.ServiceEntry)
+			device := protocol.MakeDeviceInfoTcp(service.ServiceEntry)
 			deviceChan <- device
 		}
 		close(deviceChan)
@@ -55,8 +56,8 @@ func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan w
 	return deviceChan
 }
 
-func (backend *DeviceBackend) GetStatus() websocket.Status {
-	return websocket.Status{
+func (backend *DeviceBackend) GetStatus() protocol.Status {
+	return protocol.Status{
 		Address: backend.address,
 	}
 }

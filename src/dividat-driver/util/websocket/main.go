@@ -11,6 +11,8 @@ import (
 	"github.com/cskr/pubsub"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
+
+	"github.com/dividat/driver/src/dividat-driver/protocol"
 )
 
 type SendMsg struct {
@@ -20,13 +22,13 @@ type SendMsg struct {
 }
 
 type DeviceBackend interface {
-	GetStatus() Status
-	Discover(duration int, ctx context.Context) chan DeviceInfo
+	GetStatus() protocol.Status
+	Discover(duration int, ctx context.Context) chan protocol.DeviceInfo
 	Connect(address string)
 	Disconnect()
 	RegisterSubscriber(r *http.Request)
 	DeregisterSubscriber(r *http.Request)
-	ProcessFirmwareUpdateRequest(command UpdateFirmware, send SendMsg)
+	ProcessFirmwareUpdateRequest(command protocol.UpdateFirmware, send SendMsg)
 	IsUpdatingFirmware() bool
 }
 
@@ -96,7 +98,7 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	sendMessage := func(message Message) error {
+	sendMessage := func(message protocol.Message) error {
 		msg, err := message.MarshalJSON()
 		if err != nil {
 			return err
@@ -104,7 +106,7 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return sendText(msg)
 	}
 
-	sendBroadcast := func(broadcast Broadcast) error {
+	sendBroadcast := func(broadcast protocol.Broadcast) error {
 		msg, err := broadcast.MarshalJSON()
 		if err != nil {
 			return err
@@ -170,16 +172,16 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			} else if messageType == websocket.TextMessage {
 
-				var command Command
+				var command protocol.Command
 				decodeErr := json.Unmarshal(msg, &command)
 				if decodeErr != nil {
 					log.WithField("rawCommand", msg).WithError(decodeErr).Warning("Can not decode command.")
 					continue
 				}
-				log.WithField("command", prettyPrintCommand(command)).Debug("Received command.")
+				log.WithField("command", protocol.PrettyPrintCommand(command)).Debug("Received command.")
 
 				if handle.DeviceBackend.IsUpdatingFirmware() && (command.GetStatus == nil || command.Discover == nil) {
-					log.WithField("command", prettyPrintCommand(command)).Debug("Ignoring command during firmware update.")
+					log.WithField("command", protocol.PrettyPrintCommand(command)).Debug("Ignoring command during firmware update.")
 					continue
 				}
 
@@ -197,11 +199,11 @@ func (handle *Handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // HELPERS
 
 // dispatchCommand handles incomming commands and sends responses back up the WebSocket
-func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, command Command, sendMessage func(Message) error) error {
+func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, command protocol.Command, sendMessage func(protocol.Message) error) error {
 
 	if command.GetStatus != nil {
 		status := handle.DeviceBackend.GetStatus()
-		message := Message{Status: &status}
+		message := protocol.Message{Status: &status}
 		err := sendMessage(message)
 
 		if err != nil {
@@ -219,11 +221,11 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 	} else if command.Discover != nil {
 		entries := handle.DeviceBackend.Discover(command.Discover.Duration, ctx)
 
-		go func(entries chan DeviceInfo) {
+		go func(entries chan protocol.DeviceInfo) {
 			for entry := range entries {
 				log.WithField("service", entry).Debug("Discovered service.")
 
-				var message Message
+				var message protocol.Message
 				message.Discovered = &entry
 
 				err := sendMessage(message)
@@ -253,24 +255,24 @@ func (handle *Handle) dispatchCommand(ctx context.Context, log *logrus.Entry, co
 	return nil
 }
 
-func firmwareUpdateSuccess(msg string) Message {
-	return firmwareUpdateMessage(FirmwareUpdateMessage{FirmwareUpdateSuccess: &msg})
+func firmwareUpdateSuccess(msg string) protocol.Message {
+	return firmwareUpdateMessage(protocol.FirmwareUpdateMessage{FirmwareUpdateSuccess: &msg})
 }
 
-func firmwareUpdateFailure(msg string) Message {
-	return firmwareUpdateMessage(FirmwareUpdateMessage{FirmwareUpdateFailure: &msg})
+func firmwareUpdateFailure(msg string) protocol.Message {
+	return firmwareUpdateMessage(protocol.FirmwareUpdateMessage{FirmwareUpdateFailure: &msg})
 }
 
-func firmwareUpdateProgress(msg string) Message {
-	return firmwareUpdateMessage(FirmwareUpdateMessage{FirmwareUpdateProgress: &msg})
+func firmwareUpdateProgress(msg string) protocol.Message {
+	return firmwareUpdateMessage(protocol.FirmwareUpdateMessage{FirmwareUpdateProgress: &msg})
 }
 
-func firmwareUpdateMessage(msg FirmwareUpdateMessage) Message {
-	return Message{FirmwareUpdateMessage: &msg}
+func firmwareUpdateMessage(msg protocol.FirmwareUpdateMessage) protocol.Message {
+	return protocol.Message{FirmwareUpdateMessage: &msg}
 }
 
 // rx_broadcast_loop reads events from DeviceBackend and forwards them to the WebSocket
-func rx_broadcast_loop(ctx context.Context, rx chan interface{}, send func(Broadcast) error) {
+func rx_broadcast_loop(ctx context.Context, rx chan interface{}, send func(protocol.Broadcast) error) {
 	var err error
 	for {
 		select {
@@ -278,7 +280,7 @@ func rx_broadcast_loop(ctx context.Context, rx chan interface{}, send func(Broad
 			return
 
 		case msg := <-rx:
-			data, ok := msg.(Broadcast)
+			data, ok := msg.(protocol.Broadcast)
 			if ok {
 				err = send(data)
 			}
