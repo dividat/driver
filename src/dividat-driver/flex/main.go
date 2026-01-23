@@ -129,12 +129,12 @@ func deviceToReader(deviceInfo websocket.UsbDeviceInfo) SerialReader {
 	return nil
 }
 
-// maybeRenamePassthruPrefix returns a copy of the UsbDeviceInfo with the
+// concealPassthruDevice returns a copy of the UsbDeviceInfo with the
 // "PASSTHRU-" prefix stripped from the Product field, if present.
 //
 // Allows to mock arbitrary device metadata while using the PassthruReader. Used
 // in tools/replay-flex.
-func maybeRenamePassthruPrefix(deviceInfo websocket.UsbDeviceInfo) websocket.UsbDeviceInfo {
+func concealPassthruDevice(deviceInfo websocket.UsbDeviceInfo) websocket.UsbDeviceInfo {
 	const prefix = "PASSTHRU-"
 	deviceInfo.Product = strings.TrimPrefix(deviceInfo.Product, prefix)
 	return deviceInfo
@@ -293,7 +293,7 @@ func (backend *DeviceBackend) GetStatus() websocket.Status {
 
 	if backend.currentDevice != nil {
 		status.Address = &backend.currentDevice.Path
-		renamed := maybeRenamePassthruPrefix(*backend.currentDevice)
+		renamed := concealPassthruDevice(*backend.currentDevice)
 		status.DeviceInfo = &websocket.DeviceInfo{UsbDeviceInfo: &renamed}
 	}
 	return status
@@ -343,7 +343,7 @@ func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan w
 				break
 			}
 
-			usbDevice := maybeRenamePassthruPrefix(usbDevice)
+			usbDevice := concealPassthruDevice(usbDevice)
 			device := websocket.DeviceInfo{UsbDeviceInfo: &usbDevice}
 
 			devices <- device
