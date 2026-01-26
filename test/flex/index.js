@@ -122,12 +122,21 @@ describe("Flex functionality", () => {
     it("Commands: Discover", async function () {
       const virtualDevice1 = virtualDevice;
 
-      // Create virtual Flex device with specified USB details
+      // Second virtual Flex device
       const virtualDevice2 = new VirtualDevice({
         idVendor: "16c0",
-        product: "NEWDEVICE",
+        manufacturer: "SecondVendor",
+        product: "PASSTHRU",
       });
       await virtualDevice2.initialize();
+
+      //
+      const virtualDeviceIgnored = new VirtualDevice({
+        idVendor: "14f2",
+        manufacturer: "IgnoreMe",
+        product: "NotAFlex",
+      });
+      await virtualDeviceIgnored.initialize();
 
       // Connect flex endpoint client
       const flexWS = await connectWS("ws://127.0.0.1:8382/flex");
@@ -146,6 +155,7 @@ describe("Flex functionality", () => {
 
       await virtualDevice1.registerWithDriver("http://127.0.0.1:8382");
       await virtualDevice2.registerWithDriver("http://127.0.0.1:8382");
+      await virtualDeviceIgnored.registerWithDriver("http://127.0.0.1:8382");
 
       sendCmd(flexWS, {
         type: 'Discover',
@@ -157,10 +167,18 @@ describe("Flex functionality", () => {
       expect(devices).to.have.length(2);
 
       const receivedFields = devices.map((d) => {
-          return { path: d.device.usbDevice.path, product: d.device.usbDevice.product }
+          return {
+              path: d.device.usbDevice.path,
+              manufacturer: d.device.usbDevice.manufacturer,
+              product: d.device.usbDevice.product
+            }
       });
       const actualFields = [virtualDevice1, virtualDevice2].map((d) => {
-          return { path: d.address, product: d.product }
+          return {
+              path: d.address,
+              manufacturer: d.manufacturer,
+              product: d.product
+          }
       });
       expect(receivedFields).to.have.deep.members(actualFields);
     });

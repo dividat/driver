@@ -119,15 +119,17 @@ type SerialReader interface {
 }
 
 // Pick the appropriate reader for the device
-func deviceToReader(deviceInfo protocol.UsbDeviceInfo) SerialReader {
-	if strings.HasPrefix(deviceInfo.Product, "PASSTHRU") {
+func deviceFamilyToReader(family enumerator.DeviceFamily) SerialReader {
+	switch family {
+	case enumerator.DeviceFamilyPassthru:
 		return &passthru.PassthruReader{}
-	} else if deviceInfo.Manufacturer == "Teensyduino" {
+	case enumerator.DeviceFamilySeningTex:
 		return &sensingtex.SensingTexReader{}
-	} else if deviceInfo.Manufacturer == "Sensitronics" {
+	case enumerator.DeviceFamilySensitronics:
 		return &sensitronics.SensitronicsReader{}
+	default:
+		return nil
 	}
-	return nil
 }
 
 // concealPassthruDevice returns a copy of the UsbDeviceInfo with the
@@ -142,10 +144,12 @@ func concealPassthruDevice(deviceInfo protocol.UsbDeviceInfo) protocol.UsbDevice
 }
 
 // connect to a "validated" device
-func (backend *DeviceBackend) connectInternal(device protocol.UsbDeviceInfo) error {
+func (backend *DeviceBackend) connectInternal(matchedDevice enumerator.MatchedDevice) error {
 	// Only allow one connection change at a time
 	backend.connectionChangeMutex.Lock()
 	defer backend.connectionChangeMutex.Unlock()
+
+	device := matchedDevice.Info
 
 	// in theory we could just look at UsbDeviceInfo.Path, but being defensive
 	if reflect.DeepEqual(&device, backend.currentDevice) {
@@ -170,10 +174,10 @@ func (backend *DeviceBackend) connectInternal(device protocol.UsbDeviceInfo) err
 		return err
 	}
 	backend.log.WithField("path", device.Path).Info("Opened serial port.")
-	reader := deviceToReader(device)
+	reader := deviceFamilyToReader(matchedDevice.Family)
 	// should not happen
 	if reader == nil {
-		backend.log.WithField("device", device).Error("Could not find reader for device!")
+		backend.log.WithField("device", matchedDevice).Error("Could not find reader for device!")
 		port.Close()
 		return err
 	}
@@ -302,10 +306,10 @@ func (backend *DeviceBackend) GetStatus() protocol.Status {
 
 // NOTE: The remaining Driver commands are not currently used in Play for Flex
 
-func (backend *DeviceBackend) lookupDeviceInfo(portName string) *protocol.UsbDeviceInfo {
+func (backend *DeviceBackend) lookupDeviceInfo(portName string) *enumerator.MatchedDevice {
 	devices := backend.enumerator.ListMatchingDevices()
 	for _, device := range devices {
-		if device.Path == portName {
+		if device.Info.Path == portName {
 			return &device
 		}
 	}
@@ -337,14 +341,14 @@ func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan p
 	matching := backend.enumerator.ListMatchingDevices()
 	devices := make(chan protocol.DeviceInfo)
 
-	go func(usbDevices []protocol.UsbDeviceInfo) {
-		for _, usbDevice := range usbDevices {
+	go func(matchedDevices []enumerator.MatchedDevice) {
+		for _, matchedDevice := range matchedDevices {
 			// Terminate if we have been cancelled
 			if ctx.Err() != nil {
 				break
 			}
 
-			usbDevice := concealPassthruDevice(usbDevice)
+			usbDevice := concealPassthruDevice(matchedDevice.Info)
 			device := protocol.MakeDeviceInfoUsb(usbDevice)
 
 			devices <- device

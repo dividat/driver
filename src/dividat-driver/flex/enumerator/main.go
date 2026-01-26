@@ -9,6 +9,15 @@ import (
 	serialenum "go.bug.st/serial/enumerator"
 
 	"github.com/dividat/driver/src/dividat-driver/protocol"
+	"github.com/dividat/driver/src/dividat-driver/util"
+)
+
+type DeviceFamily int
+
+const (
+	DeviceFamilyPassthru DeviceFamily = iota
+	DeviceFamilySeningTex
+	DeviceFamilySensitronics
 )
 
 type DeviceEnumerator struct {
@@ -44,38 +53,63 @@ func (handle *DeviceEnumerator) getSerialPortList() ([]*serialenum.PortDetails, 
 	}
 }
 
-func (handle *DeviceEnumerator) ListMatchingDevices() []protocol.UsbDeviceInfo {
-	ports, err := handle.getSerialPortList()
-	if err != nil {
-		handle.log.WithField("error", err).Info("Could not list serial devices.")
-		return nil
-	}
-	var matching []protocol.UsbDeviceInfo
-	for _, port := range ports {
-		handle.log.WithField("name", port.Name).WithField("vendor", port.VID).Debug("Considering serial port.")
-
-		if isFlexLike(*port) {
-			device, err := portDetailsToDeviceInfo(*port)
-			if err != nil {
-				handle.log.WithField("port", port).WithField("err", err).Error("Failed to convert serial port details to device info!")
-			} else {
-				handle.log.WithField("name", port.Name).Debug("Serial port matches a Flex device.")
-				matching = append(matching, *device)
-			}
-		}
-	}
-	return matching
-}
-
 // Check whether a port looks like a potential Flex device.
 //
 // Vendor IDs:
 //
 //	16C0 - Van Ooijen Technische Informatica (Teensy)
-func isFlexLike(port serialenum.PortDetails) bool {
-	vendorId := strings.ToUpper(port.VID)
+func isTeensyDevice(device protocol.UsbDeviceInfo) bool {
+	return device.IdVendor == 0x16C0
+}
 
-	return vendorId == "16C0"
+func findMatchingDeviceFamily(device protocol.UsbDeviceInfo) *DeviceFamily {
+	if !isTeensyDevice(device) {
+		return nil
+	}
+
+	if strings.HasPrefix(device.Product, "PASSTHRU") {
+		return util.PointerTo(DeviceFamilyPassthru)
+	}
+
+	if device.Manufacturer == "Teensyduino" {
+		return util.PointerTo(DeviceFamilySeningTex)
+	} else if device.Manufacturer == "Sensitronics" {
+		return util.PointerTo(DeviceFamilySensitronics)
+	}
+
+	return nil
+}
+
+type MatchedDevice struct {
+	Family DeviceFamily
+	Info   protocol.UsbDeviceInfo
+}
+
+func (handle *DeviceEnumerator) ListMatchingDevices() []MatchedDevice {
+	ports, err := handle.getSerialPortList()
+	if err != nil {
+		handle.log.WithField("error", err).Info("Could not list serial devices.")
+		return nil
+	}
+	var matching []MatchedDevice
+	for _, port := range ports {
+		handle.log.WithField("name", port.Name).WithField("vendor", port.VID).Debug("Considering serial port.")
+
+		device, err := portDetailsToDeviceInfo(*port)
+		if err != nil {
+			handle.log.WithField("port", port).WithField("err", err).Error("Failed to convert serial port details to device info!")
+			continue
+		}
+
+		family := findMatchingDeviceFamily(*device)
+
+		if family != nil {
+			handle.log.WithField("name", port.Name).WithField("family", *family).Debug("Serial port matches a Flex device.")
+			matchedDevice := MatchedDevice{Family: *family, Info: *device}
+			matching = append(matching, matchedDevice)
+		}
+	}
+	return matching
 }
 
 func portDetailsToDeviceInfo(port serialenum.PortDetails) (*protocol.UsbDeviceInfo, error) {
