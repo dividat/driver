@@ -123,7 +123,7 @@ func deviceFamilyToReader(family enumerator.DeviceFamily) SerialReader {
 	switch family {
 	case enumerator.DeviceFamilyPassthru:
 		return &passthru.PassthruReader{}
-	case enumerator.DeviceFamilySeningTex:
+	case enumerator.DeviceFamilySensingTex:
 		return &sensingtex.SensingTexReader{}
 	case enumerator.DeviceFamilySensitronics:
 		return &sensitronics.SensitronicsReader{}

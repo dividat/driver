@@ -16,7 +16,7 @@ type DeviceFamily int
 
 const (
 	DeviceFamilyPassthru DeviceFamily = iota
-	DeviceFamilySeningTex
+	DeviceFamilySensingTex
 	DeviceFamilySensitronics
 )
 
@@ -72,7 +72,7 @@ func findMatchingDeviceFamily(device protocol.UsbDeviceInfo) *DeviceFamily {
 	}
 
 	if device.Manufacturer == "Teensyduino" {
-		return util.PointerTo(DeviceFamilySeningTex)
+		return util.PointerTo(DeviceFamilySensingTex)
 	} else if device.Manufacturer == "Sensitronics" {
 		return util.PointerTo(DeviceFamilySensitronics)
 	}
