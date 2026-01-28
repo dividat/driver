@@ -30,6 +30,7 @@ import (
 	"github.com/dividat/driver/src/dividat-driver/flex/device/sensingtex"
 	"github.com/dividat/driver/src/dividat-driver/flex/device/sensitronics"
 	"github.com/dividat/driver/src/dividat-driver/flex/enumerator"
+	"github.com/dividat/driver/src/dividat-driver/flex/enumerator/mockdev"
 	"github.com/dividat/driver/src/dividat-driver/protocol"
 	"github.com/dividat/driver/src/dividat-driver/util"
 	"github.com/dividat/driver/src/dividat-driver/websocket"
@@ -68,12 +69,12 @@ type DeviceBackend struct {
 }
 
 // New returns an initialized handler
-func New(ctx context.Context, log *logrus.Entry, enumerator *enumerator.DeviceEnumerator) *Handle {
+func New(ctx context.Context, log *logrus.Entry, mockDeviceRegistry *mockdev.MockDeviceRegistry) *Handle {
 	backend := DeviceBackend{
 		ctx: ctx,
 		log: log,
 
-		enumerator: enumerator,
+		enumerator: enumerator.New(ctx, log.WithField("package", "flex.enumerator"), mockDeviceRegistry),
 
 		broker: pubsub.New(32),
 

@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dividat/driver/src/dividat-driver/flex"
-	flexenum "github.com/dividat/driver/src/dividat-driver/flex/enumerator"
+	"github.com/dividat/driver/src/dividat-driver/flex/enumerator/mockdev"
 	"github.com/dividat/driver/src/dividat-driver/logging"
 	"github.com/dividat/driver/src/dividat-driver/rfid"
 	"github.com/dividat/driver/src/dividat-driver/senso"
@@ -23,7 +23,7 @@ var version string
 const serverPort = "8382"
 
 // Start the driver server
-func Start(logger *logrus.Logger, origins []string, testMode bool) context.CancelFunc {
+func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 	// Log Server
 	logServer := logging.NewLogServer()
 	logger.AddHook(logServer)
@@ -57,10 +57,10 @@ func Start(logger *logrus.Logger, origins []string, testMode bool) context.Cance
 	http.Handle("/senso", originMiddleware(origins, baseLog, sensoHandle))
 
 	// Setup Flex reader
-	flexEnumerator := flexenum.New(ctx, baseLog.WithField("package", "flex.enumerator"), testMode)
+	mockDeviceRegistry := mockdev.New(baseLog.WithField("package", "flex.enumerator.mockdev"))
 	http.Handle("/flex/mock", http.RedirectHandler("/flex/mock/", http.StatusMovedPermanently))
-	http.Handle("/flex/mock/", http.StripPrefix("/flex/mock", flexEnumerator))
-	flexHandle := flex.New(ctx, baseLog.WithField("package", "flex"), flexEnumerator)
+	http.Handle("/flex/mock/", http.StripPrefix("/flex/mock", mockDeviceRegistry))
+	flexHandle := flex.New(ctx, baseLog.WithField("package", "flex"), mockDeviceRegistry)
 	http.Handle("/flex", originMiddleware(origins, baseLog, flexHandle))
 
 	// Setup RFID scanner

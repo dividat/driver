@@ -71,9 +71,8 @@ the Senso replayer and also allows to fake device metadata.
 Flex replay works by creating a mock serial device (using
 `test/flex/mock/VirtualDevice.js`) and registering it in the Driver.
 
-Driver must be running in test mode to allow mock device registration:
-
-    ./bin/dividat-driver -test-mode
+Driver must be running and built with the `debug` tag, which is the default if
+you run `make build` and/or `make run`.
 
 You can then replay a recording using:
 

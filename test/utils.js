@@ -9,7 +9,7 @@ module.exports = {
   },
 
   startDriver: function (...args) {
-    return spawn("bin/dividat-driver", ["-test-mode", ...args], {
+    return spawn("bin/dividat-driver", args, {
       // uncomment for Driver logs when debugging:
       // stdio: "inherit",
     })

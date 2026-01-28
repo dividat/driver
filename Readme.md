@@ -14,11 +14,29 @@ The default nix shell (defined in `nix/devShell.nix`) provides all necessary dep
 
 - Enter the nix development shell: `nix develop`
 - Build the driver: `make`
-- Run the driver: `./bin/dividat-driver`
+- Run the driver: `make run` or `./bin/dividat-driver`
+
+
+### Build tags
+
+By default, all the development-related make targets (`make build`, and those
+that depend on it, e.g. `make test`, `make run`) build the driver with `debug`
+tag.
+
+The `debug` tag currently enables mock device registration for the Flex backend.
+
+Cross-build targets and plain `go build` invocations do not pass the `debug`
+tag and produce "release" builds.
+
+If you are using IDEs/other tools to build the Driver, make sure they pass the
+`debug` tag for dev builds.
 
 ### Tests
 
 Run the test suite with: `make test`.
+
+Make sure actual Senso/Flex devices are unplugged, since their presence can
+cause test assumptions about available devices to fail.
 
 ### Go modules
 
@@ -155,9 +173,8 @@ The Senso replayer will appear as a Senso network device, so both driver and rep
 
 The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer and also allows to fake device metadata.
 
-Driver must be running in test mode to allow mock device registration:
-
-    ./bin/dividat-driver -test-mode
+Driver must be running and built with the `debug` tag, which is the default if
+you run `make build` and/or `make run`.
 
 You can then replay a recording using:
 

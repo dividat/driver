@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	serialenum "go.bug.st/serial/enumerator"
 
+	"github.com/dividat/driver/src/dividat-driver/flex/enumerator/mockdev"
 	"github.com/dividat/driver/src/dividat-driver/protocol"
 	"github.com/dividat/driver/src/dividat-driver/util"
 )
@@ -21,36 +22,30 @@ const (
 )
 
 type DeviceEnumerator struct {
-	ctx                   context.Context
-	log                   *logrus.Entry
-	testMode              bool
-	registeredMockDevices map[MockDeviceId]*serialenum.PortDetails
+	ctx                context.Context
+	log                *logrus.Entry
+	mockDeviceRegistry *mockdev.MockDeviceRegistry
 }
 
-func New(ctx context.Context, log *logrus.Entry, testMode bool) *DeviceEnumerator {
+func New(ctx context.Context, log *logrus.Entry, mockDeviceRegistry *mockdev.MockDeviceRegistry) *DeviceEnumerator {
 	return &DeviceEnumerator{
-		ctx:                   ctx,
-		log:                   log,
-		testMode:              testMode,
-		registeredMockDevices: make(map[MockDeviceId]*serialenum.PortDetails),
+		ctx:                ctx,
+		log:                log,
+		mockDeviceRegistry: mockDeviceRegistry,
 	}
 }
 
 func (handle *DeviceEnumerator) getSerialPortList() ([]*serialenum.PortDetails, error) {
-	// run even in testMode for a pseudo-test that enumeration works at all
-	ports, err := serialenum.GetDetailedPortsList()
+	realDevices, err := serialenum.GetDetailedPortsList()
 	if err != nil {
 		return nil, err
 	}
-	if handle.testMode {
-		mockDevices := handle.listMockDevices()
-		// in testMode, return ONLY the test devices to ensure tests work
-		// consistently regardless of whether an actual Flex device is plugged in
-		handle.log.WithField("n", len(mockDevices)).Debug("Returning mock devices")
-		return mockDevices, nil
-	} else {
-		return ports, nil
-	}
+
+	mockDevices := handle.mockDeviceRegistry.ListMockDevices()
+
+	allDevices := append(realDevices, mockDevices...)
+
+	return allDevices, nil
 }
 
 // Check whether a port looks like a potential Flex device.
