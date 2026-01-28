@@ -73,7 +73,7 @@ func findMatchingDeviceFamily(device protocol.UsbDeviceInfo) *DeviceFamily {
 
 	if device.Manufacturer == "Teensyduino" {
 		return util.PointerTo(DeviceFamilySensingTex)
-	} else if device.Manufacturer == "Sensitronics" {
+	} else if device.Manufacturer == "Sensitronics" || device.Manufacturer == "Dividat" {
 		return util.PointerTo(DeviceFamilySensitronics)
 	}
 

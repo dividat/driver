@@ -25,12 +25,12 @@ const DEVICE_USB_INFO = {
     product: "Teensy",
     bcdDevice: "0278",
   },
-  // Sensitronics (V6)
-  sensitronics: {
+  // V6 (Sensitronics)
+  v6: {
     idVendor: "16c0",
     idProduct: "0483",
-    manufacturer: "Sensitronics",
-    product: "Dividat16x16",
+    manufacturer: "Dividat",
+    product: "FlexV6",
   },
 };
 
@@ -41,7 +41,7 @@ program
   .option("-s, --speed <number>", "replay speed multiplier (>1 faster, <1 slower)", parseFloat, 1)
   .option("--once", "play recording once and exit instead of looping")
   .option("-u, --driver-url <url>", "URL of the running Driver", "http://127.0.0.1:8382")
-  .requiredOption("-d, --device <type>", "device type to emulate (v4, v5, sensitronics)")
+  .requiredOption("-d, --device <type>", "device type to emulate (v4, v5, v6)")
   .option("--passthru", "Replay the recording verbatim. For use with recordings of /flex WS stream.")
   .parse();
 

@@ -55,11 +55,11 @@ There are 3 ways to record Senso Flex data:
      (e.g. for diff'ing)
    - You cannot use `strace` for recording (e.g. on macOS)
 
-   Note: for `sensitronics` devices, the driver outputs identical bytes to the
+   Note: for `v6` (Sensitronics) devices, the driver outputs identical bytes to the
    serial data read, just chunked/framed (i.e. `concat(serial out) ==
    concat(WS binary stream)`). This means you can record the websocket
    stream, but still replay as if it was recorded directly from the serial
-   output (using `-d sensitronics`).
+   output (using `-d v6`).
 
    By convention, such recordings are suffixed with .<devicetype>.ws.dat
 

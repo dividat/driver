@@ -514,8 +514,8 @@ describe("Flex functionality", () => {
       virtualDevice = new VirtualDevice({
         idVendor: "16c0",
         idProduct: "0483",
-        manufacturer: "Sensitronics",
-        product: "Dividat16x16",
+        manufacturer: "Dividat",
+        product: "FlexV6",
       });
       await virtualDevice.initialize();
     });
