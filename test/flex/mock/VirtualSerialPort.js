@@ -1,4 +1,3 @@
-// Disclaimer: this is 90% vibe-coded
 const { spawn } = require("child_process");
 const { EventEmitter } = require("events");
 const fs = require("fs");

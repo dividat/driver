@@ -1,4 +1,3 @@
-// Disclaimer: this is 90% vibe-coded
 const VirtualSerialPort = require("./VirtualSerialPort");
 const fs = require("fs");
 const { promisify } = require("util");
