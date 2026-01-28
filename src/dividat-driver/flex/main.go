@@ -40,9 +40,9 @@ import (
 const backgroundScanIntervalSeconds = 2
 
 // pubsub topic names, must be unique
-const brokerTopicRx = "flex-rx"
-const brokerTopicTx = "flex-tx"
-const brokerTopicRxBroadcast = "flex-rx-broadcast"
+const brokerTopicTx = "tx"
+const brokerTopicRx = "rx"
+const brokerTopicRxBroadcast = "rx-broadcast"
 
 // Handle for managing Flex
 type Handle struct {
