@@ -119,6 +119,12 @@ class VirtualDevice {
             continue;
           }
 
+          // Sleep for specified duration (adjusted by speed factor)
+          // Note: sleeping before writing the data to simulate the amount
+          // of time it took the device to produce the sample.
+          const adjustedSleepDuration = sleepDuration / speedFactor;
+          await sleep(adjustedSleepDuration);
+
           // Convert base64 to binary data
           const binaryData = Buffer.from(base64Data.trim(), "base64");
 
@@ -127,10 +133,6 @@ class VirtualDevice {
           if (!writeSuccess) {
             console.warn(`Failed to write frame data to serial port`);
           }
-
-          // Sleep for specified duration (adjusted by speed factor)
-          const adjustedSleepDuration = sleepDuration / speedFactor;
-          await sleep(adjustedSleepDuration);
         }
       } catch (error) {
         throw new Error(`Failed to replay recording: ${error.message}`);
