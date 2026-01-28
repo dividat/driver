@@ -16,9 +16,9 @@ import (
 )
 
 // Serial communication
-type PassthruReader struct{}
+type PassthruHandler struct{}
 
-func (PassthruReader) ReadFromSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
+func (PassthruHandler) Run(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
 	logger.Info("PassthruReader started")
 	readerCtx := context.WithoutCancel(ctx)
 

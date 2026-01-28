@@ -16,9 +16,9 @@ const (
 	HEADER_SIZE         = 4
 )
 
-type SensitronicsReader struct{}
+type SensitronicsHandler struct{}
 
-func (SensitronicsReader) ReadFromSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
+func (SensitronicsHandler) Run(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
 	readerCtx := context.WithoutCancel(ctx)
 
 	port.ResetInputBuffer() // flush any unread data buffered by the OS

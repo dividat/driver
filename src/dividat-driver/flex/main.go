@@ -113,21 +113,21 @@ func (backend *DeviceBackend) broadcastStatusUpdate() {
 	backend.broadcastMessage(protocol.Message{Status: &status})
 }
 
-type SerialReader interface {
+type SerialDeviceHandler interface {
 	// Read from the serial port and pipe its signal into the callback, summarizing
 	// package units into a buffer. Forward commands from client.
-	ReadFromSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte))
+	Run(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte))
 }
 
-// Pick the appropriate reader for the device
-func deviceFamilyToReader(family enumerator.DeviceFamily) SerialReader {
+// Pick the appropriate handler for the device
+func deviceFamilyToHandler(family enumerator.DeviceFamily) SerialDeviceHandler {
 	switch family {
 	case enumerator.DeviceFamilyPassthru:
-		return &passthru.PassthruReader{}
+		return &passthru.PassthruHandler{}
 	case enumerator.DeviceFamilySensingTex:
-		return &sensingtex.SensingTexReader{}
+		return &sensingtex.SensingTexHandler{}
 	case enumerator.DeviceFamilySensitronics:
-		return &sensitronics.SensitronicsReader{}
+		return &sensitronics.SensitronicsHandler{}
 	default:
 		return nil
 	}
@@ -175,7 +175,7 @@ func (backend *DeviceBackend) connectInternal(matchedDevice enumerator.MatchedDe
 		return err
 	}
 	backend.log.WithField("path", device.Path).Info("Opened serial port.")
-	reader := deviceFamilyToReader(matchedDevice.Family)
+	reader := deviceFamilyToHandler(matchedDevice.Family)
 	// should not happen
 	if reader == nil {
 		backend.log.WithField("device", matchedDevice).Error("Could not find reader for device!")
@@ -199,7 +199,7 @@ func (backend *DeviceBackend) connectInternal(matchedDevice enumerator.MatchedDe
 
 	go func() {
 		defer cancel()
-		reader.ReadFromSerial(ctx, backend.log, port, tx, onReceive)
+		reader.Run(ctx, backend.log, port, tx, onReceive)
 	}()
 
 	return nil

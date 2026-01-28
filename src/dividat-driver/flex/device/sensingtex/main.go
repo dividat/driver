@@ -56,9 +56,9 @@ func bitdepthCommandToBytesPerSample(cmd []byte) int {
 	}
 }
 
-type SensingTexReader struct{}
+type SensingTexHandler struct{}
 
-func (SensingTexReader) ReadFromSerial(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
+func (SensingTexHandler) Run(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
 	readerCtx, readerCtxCancel := context.WithCancel(ctx)
 
 	port.ResetInputBuffer() // flush any unread data buffered by the OS
