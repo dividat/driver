@@ -32,14 +32,17 @@ set -euo pipefail
 IN=""
 OUT=""
 VERSION=""
+BUILD_TAGS=""
 
-while getopts "i:o:v:" opt; do
+while getopts "i:o:v:t:" opt; do
   case $opt in
     i) IN="$OPTARG"
        ;;
     o) OUT="$OPTARG"
        ;;
     v) VERSION="$OPTARG"
+       ;;
+    t) BUILD_TAGS="$OPTARG"
        ;;
     \?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
   esac
@@ -60,7 +63,7 @@ ensure_flag_set "-i" "$IN"
 ensure_flag_set "-o" "$OUT"
 
 if [ "$all_flags_set" = false ]; then
-  echo "Usage: build-driver -v <version> -i <input> -o <output>"
+  echo "Usage: build-driver -v <version> -i <input> -o <output> [-t <tags>]"
   exit 1
 fi
 
@@ -81,7 +84,9 @@ if [ $VERBOSE = "1" ]; then
   echo "GCO_ENABLED=${CGO_ENABLED:=}"
   echo "CC=${CC:=}"
   echo "LD_FLAGS=$LD_FLAGS"
+  echo "BUILD_TAGS=$BUILD_TAGS"
 fi
 
-go build  -ldflags "$LD_FLAGS" -o "$OUT" "$IN"
+go build -tags "$BUILD_TAGS" -ldflags "$LD_FLAGS" -o "$OUT" "$IN"
+
 echo "Built $OUT"

@@ -9,14 +9,15 @@ module.exports = {
   },
 
   startDriver: function (...args) {
-    return spawn('bin/dividat-driver', args)
-    // useful for debugging:
-    // return spawn('bin/dividat-driver', [], {stdio: 'inherit'})
+    return spawn("bin/dividat-driver", args, {
+      // uncomment for Driver logs when debugging:
+      // stdio: "inherit",
+    })
   },
 
-  connectWS: function (url, opts) {
+  connectWS: function (url, opts, protocols) {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(url, opts)
+      const ws = new WebSocket(url, protocols, opts)
       ws.on('open', () => {
         ws.removeAllListeners()
         resolve(ws)

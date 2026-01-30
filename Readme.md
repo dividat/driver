@@ -14,11 +14,29 @@ The default nix shell (defined in `nix/devShell.nix`) provides all necessary dep
 
 - Enter the nix development shell: `nix develop`
 - Build the driver: `make`
-- Run the driver: `./bin/dividat-driver`
+- Run the driver: `make run` or `./bin/dividat-driver`
+
+
+### Build tags
+
+By default, all the development-related make targets (`make build`, and those
+that depend on it, e.g. `make test`, `make run`) build the driver with `debug`
+tag.
+
+The `debug` tag currently enables mock device registration for the Flex backend.
+
+Cross-build targets and plain `go build` invocations do not pass the `debug`
+tag and produce "release" builds.
+
+If you are using IDEs/other tools to build the Driver, make sure they pass the
+`debug` tag for dev builds.
 
 ### Tests
 
 Run the test suite with: `make test`.
+
+Make sure actual Senso/Flex devices are unplugged, since their presence can
+cause test assumptions about available devices to fail.
 
 ### Go modules
 
@@ -120,7 +138,20 @@ Data from Senso can be recorded using the [`recorder`](src/dividat-driver/record
 
 #### Senso Flex data
 
-Like Senso data, but with `make record-flex`.
+On Linux, you can record the raw serial data using:
+
+        ./tools/record-flex-serial -o recording.serial.dat
+
+On macOS, you can only record the WebSocket binary data from the `/flex`
+endpoint as output by the Driver, using:
+
+        make record-flex > recording.ws.dat
+
+For Flex V6 (Sensitronics) devices, the two methods should be equivalent.
+
+The Driver must be running and connected to the device in both cases.
+
+For more details, see the [Flex recording and replay](tools/flex-recording-and-replay.md) docs.
 
 ### Data replayer
 
@@ -140,8 +171,16 @@ The Senso replayer will appear as a Senso network device, so both driver and rep
 
 #### Senso Flex replay
 
-The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer.
+The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer and also allows to fake device metadata.
 
-It mocks the driver with respect to the `/flex` WebSocket resource and the `/` metadata HTTP route, so the real driver can not be running at the same time.
+Driver must be running and built with the `debug` tag, which is the default if
+you run `make build` and/or `make run`.
 
-You can control the mocked driver version via the `--driver-version` flag.
+You can then replay a recording using:
+
+    node tools/replay-flex -d <device> recording.dat
+
+If you are using a WebSocket binary stream recording, you should also specify
+`--passthru` mode.
+
+For more details, see the [Flex recording and replay](tools/flex-recording-and-replay.md) docs.

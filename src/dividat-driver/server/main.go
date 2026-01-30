@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dividat/driver/src/dividat-driver/flex"
+	"github.com/dividat/driver/src/dividat-driver/flex/enumerator/mockdev"
 	"github.com/dividat/driver/src/dividat-driver/logging"
 	"github.com/dividat/driver/src/dividat-driver/rfid"
 	"github.com/dividat/driver/src/dividat-driver/senso"
@@ -55,8 +56,11 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 	sensoHandle := senso.New(ctx, baseLog.WithField("package", "senso"))
 	http.Handle("/senso", originMiddleware(origins, baseLog, sensoHandle))
 
-	// Setup SensingTex reader
-	flexHandle := flex.New(ctx, baseLog.WithField("package", "flex"))
+	// Setup Flex reader
+	mockDeviceRegistry := mockdev.New(baseLog.WithField("package", "flex.enumerator.mockdev"))
+	http.Handle("/flex/mock", http.RedirectHandler("/flex/mock/", http.StatusMovedPermanently))
+	http.Handle("/flex/mock/", http.StripPrefix("/flex/mock", mockDeviceRegistry))
+	flexHandle := flex.New(ctx, baseLog.WithField("package", "flex"), mockDeviceRegistry)
 	http.Handle("/flex", originMiddleware(origins, baseLog, flexHandle))
 
 	// Setup RFID scanner

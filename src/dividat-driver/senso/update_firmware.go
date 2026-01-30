@@ -8,41 +8,37 @@ import (
 	"io"
 
 	"github.com/dividat/driver/src/dividat-driver/firmware"
+	"github.com/dividat/driver/src/dividat-driver/protocol"
+	"github.com/dividat/driver/src/dividat-driver/websocket"
 )
 
-type SendMsg struct {
-	progress func(string)
-	failure  func(string)
-	success  func(string)
-}
-
 // Disconnect from current connection
-func (handle *Handle) ProcessFirmwareUpdateRequest(command UpdateFirmware, send SendMsg) {
-	handle.log.Info("Processing firmware update request.")
-	handle.firmwareUpdate.SetUpdating(true)
+func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command protocol.UpdateFirmware, send websocket.SendMsg) {
+	backend.log.Info("Processing firmware update request.")
+	backend.firmwareUpdate.SetUpdating(true)
 
-	if handle.cancelCurrentConnection != nil {
-		send.progress("Disconnecting from the Senso")
-		handle.cancelCurrentConnection()
+	if backend.cancelCurrentConnection != nil {
+		send.Progress("Disconnecting from the Senso")
+		backend.cancelCurrentConnection()
 	}
 
 	image, err := decodeImage(command.Image)
 	if err != nil {
 		msg := fmt.Sprintf("Error decoding base64 string: %v", err)
-		send.failure(msg)
-		handle.log.Error(msg)
+		send.Failure(msg)
+		backend.log.Error(msg)
 		return
 	}
 
-	err = firmware.UpdateBySerial(context.Background(), command.SerialNumber, image, send.progress)
+	err = firmware.UpdateBySerial(context.Background(), command.SerialNumber, image, send.Progress)
 	if err != nil {
 		failureMsg := fmt.Sprintf("Failed to update firmware: %v", err)
-		send.failure(failureMsg)
-		handle.log.Error(failureMsg)
+		send.Failure(failureMsg)
+		backend.log.Error(failureMsg)
 	} else {
-		send.success("Firmware successfully transmitted")
+		send.Success("Firmware successfully transmitted")
 	}
-	handle.firmwareUpdate.SetUpdating(false)
+	backend.firmwareUpdate.SetUpdating(false)
 }
 
 func decodeImage(base64Str string) (io.Reader, error) {

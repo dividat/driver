@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    echo "Usage: $0 [-p PID] [-d DEVICE] [-o OUTPUT]" >&2
+    echo "  -p PID     Process ID to trace (default: pidof dividat-driver)" >&2
+    echo "  -d DEVICE  Device path to trace (default: /dev/ttyACM0)" >&2
+    echo "  -o OUTPUT  Output file (default: stdout)" >&2
+    exit 1
+}
+
+while getopts "p:d:o:h" opt; do
+    case $opt in
+        p) PID="$OPTARG" ;;
+        d) DEVICE="$OPTARG" ;;
+        o) OUTPUT="$OPTARG" ;;
+        h) usage ;;
+        *) usage ;;
+    esac
+done
+
+if [[ -z "${PID:-}" ]]; then
+    if ! PID=$(pidof dividat-driver 2>/dev/null); then
+        echo "Error: dividat-driver is not running" >&2
+        exit 1
+    fi
+fi
+
+if [[ -z "${DEVICE:-}" ]]; then
+    DEVICE="/dev/ttyACM0"
+fi
+
+if [[ ! -e "$DEVICE" ]]; then
+    echo "Error: Device $DEVICE does not exist" >&2
+    exit 1
+fi
+
+if [[ -z "${OUTPUT:-}" ]]; then
+    OUTPUT="/dev/stdout"
+fi
+
+echo "Tracing PID=$PID, device=$DEVICE, following all threads and forks..." >&2
+
+# strace output will look like this:
+# [pid 166687] 1767784040.380 read(8, "\x01\x01\x00", 4096) = 3
+# [pid 166687] 1767784040.387 read(8, "\x4e\x0a\x00\x04\x50\x0a\x02\x02\x00\x01\x01\x00\x02\x02\x00\x01\x01\x00", 4096) = 18
+# [pid 166687] 1767784040.395 read(8, "\x4e\x0a\x00\x04\x50\x0a\x02\x02\x00\x01\x01\x00\x02\x02\x00\x01\x01\x00", 4096) = 18
+strace \
+    --timestamps=format:unix,precision:ms \
+    -s 65536 \
+    -xx \
+    -e trace=read,readv \
+    -P "$DEVICE" \
+    --follow-forks -p "$PID" 2>&1 | \
+awk '
+BEGIN { prev = 0 }
+match($0, /^[pid [0-9]+\] ([0-9.]+) readv?\([0-9]+, "([^"]+)",/, m) {
+    ts = m[1]
+    hex = m[2]
+    gsub(/\\x/, "", hex)
+
+    if (prev == 0) delta = 0
+    else delta = int((ts - prev) * 1000)
+    prev = ts
+
+    printf "%d,", delta
+    print hex
+}
+' | while IFS=, read -r delta hex; do
+    printf "%d, " "$delta"
+    echo "$hex" | xxd -r -p | base64 --wrap=0
+    echo ""
+done >> "$OUTPUT"

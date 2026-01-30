@@ -14,175 +14,364 @@ The functionality of this module is as follows:
 */
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/binary"
+	"net/http"
+	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cskr/pubsub"
+	gorilla "github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 	"go.bug.st/serial"
-	"go.bug.st/serial/enumerator"
+
+	"github.com/dividat/driver/src/dividat-driver/flex/device/passthru"
+	"github.com/dividat/driver/src/dividat-driver/flex/device/sensingtex"
+	"github.com/dividat/driver/src/dividat-driver/flex/device/sensitronics"
+	"github.com/dividat/driver/src/dividat-driver/flex/enumerator"
+	"github.com/dividat/driver/src/dividat-driver/flex/enumerator/mockdev"
+	"github.com/dividat/driver/src/dividat-driver/protocol"
+	"github.com/dividat/driver/src/dividat-driver/util"
+	"github.com/dividat/driver/src/dividat-driver/websocket"
 )
 
-// Handle for managing SensingTex connection
+// how often to look for Flex devices while there are clients and no devices are
+// connected
+const backgroundScanIntervalSeconds = 2
+
+// pubsub topic names, must be unique
+const brokerTopicTx = "tx"
+const brokerTopicRx = "rx"
+const brokerTopicRxBroadcast = "rx-broadcast"
+
+// Handle for managing Flex
 type Handle struct {
+	websocket.Handle
+}
+
+type DeviceBackend struct {
+	ctx context.Context
+	log *logrus.Entry
+
+	currentDevice *protocol.UsbDeviceInfo
+
+	enumerator *enumerator.DeviceEnumerator
+
 	broker *pubsub.PubSub
 
-	ctx context.Context
-
 	cancelCurrentConnection context.CancelFunc
-	subscriberCount         int
+	connectionChangeMutex   *sync.Mutex
 
-	log *logrus.Entry
+	backgroundScanCancel context.CancelFunc
+
+	subscriberCount int
 }
 
 // New returns an initialized handler
-func New(ctx context.Context, log *logrus.Entry) *Handle {
-	handle := Handle{
+func New(ctx context.Context, log *logrus.Entry, mockDeviceRegistry *mockdev.MockDeviceRegistry) *Handle {
+	backend := DeviceBackend{
+		ctx: ctx,
+		log: log,
+
+		enumerator: enumerator.New(ctx, log.WithField("package", "flex.enumerator"), mockDeviceRegistry),
+
 		broker: pubsub.New(32),
-		ctx:    ctx,
-		log:    log,
+
+		connectionChangeMutex: &sync.Mutex{},
+
+		subscriberCount: 0,
 	}
+
+	websocketHandle := websocket.Handle{
+		DeviceBackend:     &backend,
+		Broker:            backend.broker,
+		BrokerRx:          brokerTopicRx,
+		BrokerTx:          brokerTopicTx,
+		BrokerRxBroadcast: util.PointerTo(brokerTopicRxBroadcast),
+		Log:               log,
+	}
+
+	handle := Handle{Handle: websocketHandle}
 
 	// Clean up
 	go func() {
 		<-ctx.Done()
-		handle.broker.Shutdown()
+		backend.broker.Shutdown()
 	}()
 
 	return &handle
 }
 
-// Connect to device
-func (handle *Handle) Connect() {
-	handle.subscriberCount++
+func (backend *DeviceBackend) broadcastMessage(msg protocol.Message) {
+	broadcast := protocol.Broadcast{Message: msg}
+	backend.broker.TryPub(broadcast, brokerTopicRxBroadcast)
+}
 
-	// If there is no existing connection, create it
-	if handle.cancelCurrentConnection == nil {
-		ctx, cancel := context.WithCancel(handle.ctx)
+func (backend *DeviceBackend) broadcastStatusUpdate() {
+	status := backend.GetStatus()
+	backend.broadcastMessage(protocol.Message{Status: &status})
+}
 
-		onReceive := func(data []byte) {
-			handle.broker.TryPub(data, "flex-rx")
+type SerialDeviceHandler interface {
+	// Read from the serial port and pipe its signal into the callback, summarizing
+	// package units into a buffer. Forward commands from client.
+	Run(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte))
+}
+
+// Pick the appropriate handler for the device
+func deviceFamilyToHandler(family enumerator.DeviceFamily) SerialDeviceHandler {
+	switch family {
+	case enumerator.DeviceFamilyPassthru:
+		return &passthru.PassthruHandler{}
+	case enumerator.DeviceFamilySensingTex:
+		return &sensingtex.SensingTexHandler{}
+	case enumerator.DeviceFamilySensitronics:
+		return &sensitronics.SensitronicsHandler{}
+	default:
+		return nil
+	}
+}
+
+// concealPassthruDevice returns a copy of the UsbDeviceInfo with the
+// "PASSTHRU-" prefix stripped from the Product field, if present.
+//
+// Allows to mock arbitrary device metadata while using the PassthruReader. Used
+// in tools/replay-flex.
+func concealPassthruDevice(deviceInfo protocol.UsbDeviceInfo) protocol.UsbDeviceInfo {
+	const prefix = "PASSTHRU-"
+	deviceInfo.Product = strings.TrimPrefix(deviceInfo.Product, prefix)
+	return deviceInfo
+}
+
+// connect to a "validated" device
+func (backend *DeviceBackend) connectInternal(matchedDevice enumerator.MatchedDevice) error {
+	// Only allow one connection change at a time
+	backend.connectionChangeMutex.Lock()
+	defer backend.connectionChangeMutex.Unlock()
+
+	device := matchedDevice.Info
+
+	// in theory we could just look at UsbDeviceInfo.Path, but being defensive
+	if reflect.DeepEqual(&device, backend.currentDevice) {
+		backend.log.Info("Ignoring connect request since we are already connected to the same device.")
+		return nil
+	}
+
+	// disconnect current connection first
+	backend.Disconnect()
+
+	backend.log.WithField("path", device.Path).Info("Attempting to connect with device.")
+
+	ctx, cancel := context.WithCancel(backend.ctx)
+
+	onReceive := func(data []byte) {
+		backend.broker.TryPub(data, brokerTopicRx)
+	}
+
+	port, err := backend.openSerial(device.Path)
+	if err != nil {
+		backend.log.WithField("path", device.Path).WithField("error", err).Info("Failed to open connection to serial port.")
+		return err
+	}
+	backend.log.WithField("path", device.Path).Info("Opened serial port.")
+	reader := deviceFamilyToHandler(matchedDevice.Family)
+	// should not happen
+	if reader == nil {
+		backend.log.WithField("device", matchedDevice).Error("Could not find reader for device!")
+		port.Close()
+		return err
+	}
+	backend.currentDevice = &device
+
+	_ = context.AfterFunc(ctx, func() {
+		backend.log.Debug("Cancelling the current connection.")
+		port.Close()
+		backend.currentDevice = nil
+		backend.cancelCurrentConnection = nil
+		backend.broadcastStatusUpdate()
+	})
+	backend.cancelCurrentConnection = cancel
+
+	backend.broadcastStatusUpdate()
+
+	tx := backend.broker.Sub(brokerTopicTx)
+
+	go func() {
+		defer cancel()
+		reader.Run(ctx, backend.log, port, tx, onReceive)
+	}()
+
+	return nil
+}
+
+func (backend *DeviceBackend) connectToFirstIfNotConnected() {
+	if backend.cancelCurrentConnection != nil {
+		// already connected, nothing to do
+		return
+	}
+
+	devices := backend.enumerator.ListMatchingDevices()
+
+	// try devices until the first success
+	for _, device := range devices {
+		err := backend.connectInternal(device)
+		if err == nil {
+			return
 		}
+	}
+}
 
-		go listeningLoop(ctx, handle.log, handle.broker.Sub("flex-tx"), onReceive)
+func (backend *DeviceBackend) disableAutoConnect() {
+	if backend.backgroundScanCancel != nil {
+		backend.backgroundScanCancel()
+		backend.backgroundScanCancel = nil
+	}
+}
 
-		handle.cancelCurrentConnection = cancel
+func (backend *DeviceBackend) enableAutoConnect() {
+	if backend.backgroundScanCancel == nil {
+		ctx, cancel := context.WithCancel(backend.ctx)
+		go backend.backgroundScan(ctx)
+		backend.backgroundScanCancel = cancel
+	}
+}
+
+func (backend *DeviceBackend) backgroundScan(ctx context.Context) {
+	ticker := time.NewTicker(backgroundScanIntervalSeconds * time.Second)
+	defer func() {
+		backend.log.Info("Stopping background scan and auto-connect")
+		ticker.Stop()
+	}()
+
+	backend.log.Info("Background scan and auto-connect started")
+
+	for {
+		select {
+		case <-ticker.C:
+			backend.connectToFirstIfNotConnected()
+
+		case <-ctx.Done():
+			return
+		}
+	}
+
+}
+
+// Check if client has requested manual-connect via a Sec-WebSocket-Protocol
+func wantsManualConnect(req *http.Request) bool {
+	for _, protocol := range gorilla.Subprotocols(req) {
+		if protocol == "manual-connect" {
+			return true
+		}
+	}
+	return false
+}
+
+func (backend *DeviceBackend) RegisterSubscriber(req *http.Request) {
+	backend.subscriberCount++
+
+	// If a client has specified manual-connect in WebSocket sub-protocols,
+	// we disable auto-connect globally. Last-client-wins, meaning that
+	// if another client connects later without `manual-connect`, then
+	// auto-connect will be re-enabled.
+	if wantsManualConnect(req) {
+		backend.disableAutoConnect()
+	} else {
+		// backwards compatible setup: auto-connect by default
+		backend.connectToFirstIfNotConnected()
+		backend.enableAutoConnect()
 	}
 }
 
 // Deregister subscribers and disconnect when none left
-func (handle *Handle) DeregisterSubscriber() {
-	handle.subscriberCount--
+func (backend *DeviceBackend) DeregisterSubscriber(req *http.Request) {
+	backend.subscriberCount--
 
-	if handle.subscriberCount == 0 && handle.cancelCurrentConnection != nil {
-		handle.cancelCurrentConnection()
-		handle.cancelCurrentConnection = nil
+	if backend.subscriberCount == 0 {
+		backend.disableAutoConnect()
+		backend.Disconnect()
 	}
 }
 
-// Keep looking for serial devices and connect to them when found, sending signals into the
-// callback.
-func listeningLoop(ctx context.Context, logger *logrus.Entry, tx chan interface{}, onReceive func([]byte)) {
-	for {
-		scanAndConnectSerial(ctx, logger, tx, onReceive)
+func (backend *DeviceBackend) GetStatus() protocol.Status {
+	status := protocol.Status{}
 
-		// Terminate if we were cancelled
-		if ctx.Err() != nil {
-			return
+	if backend.currentDevice != nil {
+		status.Address = &backend.currentDevice.Path
+		newDeviceInfo := protocol.MakeDeviceInfoUsb(concealPassthruDevice(*backend.currentDevice))
+		status.DeviceInfo = &newDeviceInfo
+	}
+	return status
+}
+
+// NOTE: The remaining Driver commands are not currently used in Play for Flex
+
+func (backend *DeviceBackend) lookupDeviceInfo(portName string) *enumerator.MatchedDevice {
+	devices := backend.enumerator.ListMatchingDevices()
+	for _, device := range devices {
+		if device.Info.Path == portName {
+			return &device
 		}
-
-		time.Sleep(2 * time.Second)
 	}
+	return nil
 }
 
-// One pass of browsing for serial devices and trying to connect to them turn by turn, first
-// successful connection wins.
-func scanAndConnectSerial(ctx context.Context, logger *logrus.Entry, tx chan interface{}, onReceive func([]byte)) {
-	ports, err := enumerator.GetDetailedPortsList()
-	if err != nil {
-		logger.WithField("error", err).Info("Could not list serial devices.")
+// Connect to device using only the address (path, e.g. "/dev/ttyACM0")
+// Currently not used in Play
+func (backend *DeviceBackend) Connect(address string) {
+	port := backend.lookupDeviceInfo(address)
+	if port == nil {
+		backend.log.WithField("address", address).Error("Could not look up device, aborting Connect.")
 		return
-	}
-
-	for _, port := range ports {
-		// Terminate if we have been cancelled
-		if ctx.Err() != nil {
-			return
-		}
-
-		logger.WithField("name", port.Name).WithField("vendor", port.VID).Debug("Considering serial port.")
-
-		if isFlexLike(port) {
-			connectSerial(ctx, logger, port.Name, tx, onReceive)
-		}
-	}
-}
-
-// Check whether a port looks like a potential Flex device.
-//
-// Vendor IDs:
-//
-//	16C0 - Van Ooijen Technische Informatica (Teensy)
-func isFlexLike(port *enumerator.PortDetails) bool {
-	vendorId := strings.ToUpper(port.VID)
-
-	return vendorId == "16C0"
-}
-
-// Serial communication
-
-type ReaderState int
-
-const (
-	WAITING_FOR_HEADER ReaderState = iota
-	HEADER_START
-	HEADER_READ_LENGTH_MSB
-	HEADER_READ_LENGTH_LSB
-	WAITING_FOR_BODY
-	BODY_START
-	BODY_READ_SAMPLE
-	UNEXPECTED_BYTE
-)
-
-const (
-	HEADER_START_MARKER = 'N'
-	BODY_START_MARKER   = 'P'
-)
-
-const (
-	// row, column and pressure value, one uint8 each
-	BYTES_PER_SAMPLE_8BIT = 3
-
-	// same as above, but pressure value is 2 bytes (uint16), big-endian
-	// Note: Sensing Tex docs state value max is 2^12-1 (hence "12bit"),
-	// but in practice they seem to send values up to ~9000, so more like
-	// "14 bit".
-	BYTES_PER_SAMPLE_12BIT = 4
-)
-
-var BITDEPTH_8_CMD = []byte{'U', 'L', '\n'}
-
-var BITDEPTH_12_CMD = []byte{'U', 'M', '\n'}
-
-func isBitdepthCommand(cmd []byte) bool {
-	return bytes.Equal(cmd, BITDEPTH_8_CMD) || bytes.Equal(cmd, BITDEPTH_12_CMD)
-}
-
-func bitdepthCommandToBytesPerSample(cmd []byte) int {
-	if bytes.Equal(cmd, BITDEPTH_8_CMD) {
-		return BYTES_PER_SAMPLE_8BIT
 	} else {
-		return BYTES_PER_SAMPLE_12BIT
+		backend.connectInternal(*port)
+	}
+
+}
+
+// Currently not used in Play
+func (backend *DeviceBackend) Disconnect() {
+	if backend.cancelCurrentConnection != nil {
+		backend.cancelCurrentConnection()
 	}
 }
 
-// Actually attempt to connect to an individual serial port and pipe its signal into the callback, summarizing
-// package units into a buffer.
-func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string, tx chan interface{}, onReceive func([]byte)) {
+// Currently not used in Play
+func (backend *DeviceBackend) Discover(duration int, ctx context.Context) chan protocol.DeviceInfo {
+	matching := backend.enumerator.ListMatchingDevices()
+	devices := make(chan protocol.DeviceInfo)
+
+	go func(matchedDevices []enumerator.MatchedDevice) {
+		for _, matchedDevice := range matchedDevices {
+			// Terminate if we have been cancelled
+			if ctx.Err() != nil {
+				break
+			}
+
+			usbDevice := concealPassthruDevice(matchedDevice.Info)
+			device := protocol.MakeDeviceInfoUsb(usbDevice)
+
+			devices <- device
+		}
+
+		close(devices)
+	}(matching)
+	return devices
+}
+
+// not supported
+func (backend *DeviceBackend) IsUpdatingFirmware() bool {
+	return false
+}
+
+// not supported
+func (backend *DeviceBackend) ProcessFirmwareUpdateRequest(command protocol.UpdateFirmware, send websocket.SendMsg) {
+	// noop
+	return
+}
+
+func (backend *DeviceBackend) openSerial(serialName string) (serial.Port, error) {
 	mode := &serial.Mode{
 		BaudRate: 115200,
 		Parity:   serial.NoParity,
@@ -190,189 +379,10 @@ func connectSerial(ctx context.Context, logger *logrus.Entry, serialName string,
 		StopBits: serial.OneStopBit,
 	}
 
-	logger.WithField("name", serialName).Info("Attempting to connect with serial port.")
 	port, err := serial.Open(serialName, mode)
 	if err != nil {
-		logger.WithField("config", mode).WithField("error", err).Info("Failed to open connection to serial port.")
-		return
-	}
-	port.ResetInputBuffer() // flush any unread data buffered by the OS
-
-	readerCtx, readerCtxCancel := context.WithCancel(ctx)
-
-	defer func() {
-		logger.WithField("name", serialName).Info("Disconnecting from serial port.")
-		port.Close()
-		readerCtxCancel()
-	}()
-
-	// For backwards compatibility, we set 8bit depth by default
-	_, err = port.Write(BITDEPTH_8_CMD)
-	if err != nil {
-		logger.WithField("error", err).Info("Failed to set bitdepth of 8.")
-		return
-	}
-	configuredBytesPerSample := BYTES_PER_SAMPLE_8BIT
-
-	// Channel to receive ack that reader is done
-	readerDoneChan := make(chan struct{})
-
-	// Start the initial reader goroutine
-	go readFromPort(readerCtx, logger, port, configuredBytesPerSample, onReceive, readerDoneChan)
-
-	// Forward WebSocket commands to device
-	for {
-		select {
-		case <-ctx.Done():
-			return
-
-		case <-readerDoneChan:
-			return
-
-		case i := <-tx:
-			data, _ := i.([]byte)
-
-			if isBitdepthCommand(data) {
-				newBytesPerSample := bitdepthCommandToBytesPerSample(data)
-
-				// If bytes per sample has changed, we need to restart the reader
-				if newBytesPerSample != configuredBytesPerSample {
-					logger.WithFields(logrus.Fields{
-						"old": configuredBytesPerSample,
-						"new": newBytesPerSample,
-					}).Info("Bytes per sample changed, will restart reader")
-
-					logger.Debug("Sending stop to reader and waiting for ack")
-					readerCtxCancel()
-					<-readerDoneChan
-					logger.Debug("Ack received, reader stopped")
-
-					_, err = port.Write(data)
-					if err != nil {
-						logger.WithField("error", err).Info("Failed to write new bitdepth.")
-						return
-					}
-
-					port.ResetInputBuffer() // flush any data that was not yet read
-
-					configuredBytesPerSample = newBytesPerSample
-
-					readerCtx, readerCtxCancel = context.WithCancel(ctx)
-					readerDoneChan = make(chan struct{})
-
-					// Start a new reader goroutine with updated bytesPerSample
-					go readFromPort(readerCtx, logger, port, configuredBytesPerSample, onReceive, readerDoneChan)
-				}
-			} else {
-				// For non-bitdepth commands, just forward them
-				_, err = port.Write(data)
-				if err != nil {
-					logger.WithField("error", err).Info("Failed to write command to serial port.")
-					return
-				}
-				logger.WithField("bytes", data).Debug("Wrote binary command to serial out: " + string(data))
-			}
-		}
-	}
-}
-
-// Infinite loop for requesting and reading serial data.
-// Stops (returns) upon any error or ctx cancel.
-func readFromPort(
-	ctx context.Context,
-	logger *logrus.Entry,
-	port serial.Port,
-	bytesPerSample int,
-	onReceive func([]byte),
-	doneChan chan<- struct{},
-) {
-	defer func() {
-		// Signal that the reader has completed
-		close(doneChan)
-	}()
-
-	reader := bufio.NewReader(port)
-	state := WAITING_FOR_HEADER
-	var samplesLeftInSet int
-	var bytesLeftInSample int
-
-	// Note: for Flex v4 this command seems to cause the firmware to push
-	// data as fast as we can consume it, whereas for Flex v5 it merely
-	// requests a single frame.
-	START_MEASUREMENT_CMD := []byte{'S', '\n'}
-	_, err := port.Write(START_MEASUREMENT_CMD)
-	if err != nil {
-		logger.WithField("error", err).Info("Failed to write start message to serial port.")
-		return
+		return nil, err
 	}
 
-	// Start signal acquisition
-	var buff []byte
-	for {
-		// Terminate if we were cancelled
-		if ctx.Err() != nil {
-			logger.Debug("Stopping reader: context cancelled")
-			return
-		}
-
-		input, err := reader.ReadByte()
-		if err != nil {
-			logger.WithField("err", err).Error("Error reading from serial port")
-			return
-		}
-
-		var length_msb byte
-
-		// Finite State Machine for parsing byte stream
-		switch {
-		case state == WAITING_FOR_HEADER && input == HEADER_START_MARKER:
-			state = HEADER_START
-		case state == HEADER_START && input == '\n':
-			state = HEADER_READ_LENGTH_MSB
-		case state == HEADER_READ_LENGTH_MSB:
-			// The number of measurements in each set is given as two
-			// consecutive bytes (big-endian).
-			length_msb = input
-			state = HEADER_READ_LENGTH_LSB
-		case state == HEADER_READ_LENGTH_LSB:
-			length_lsb := input
-			samplesLeftInSet = int(binary.BigEndian.Uint16([]byte{length_msb, length_lsb}))
-			state = WAITING_FOR_BODY
-		case state == WAITING_FOR_BODY && input == BODY_START_MARKER:
-			state = BODY_START
-		case state == BODY_START && input == '\n':
-			state = BODY_READ_SAMPLE
-			buff = []byte{}
-			bytesLeftInSample = bytesPerSample
-		case state == BODY_READ_SAMPLE:
-			buff = append(buff, input)
-			bytesLeftInSample = bytesLeftInSample - 1
-
-			if bytesLeftInSample <= 0 {
-				samplesLeftInSet = samplesLeftInSet - 1
-
-				if samplesLeftInSet <= 0 {
-					// Finish and send set
-					onReceive(buff)
-
-					// Get ready for next set and request it
-					state = WAITING_FOR_HEADER
-					// Optional for Flex v4, mandatory for v5
-					_, err = port.Write(START_MEASUREMENT_CMD)
-					if err != nil {
-						logger.WithField("error", err).Info("Failed to write poll message to serial port.")
-						return
-					}
-				} else {
-					// Start next point
-					bytesLeftInSample = bytesPerSample
-				}
-			}
-		case state == UNEXPECTED_BYTE && input == HEADER_START_MARKER:
-			// Recover from error state when a new header is seen
-			state = HEADER_START
-		default:
-			state = UNEXPECTED_BYTE
-		}
-	}
+	return port, nil
 }

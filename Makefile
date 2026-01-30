@@ -25,10 +25,10 @@ VERSION := $(shell git describe --always HEAD)
 CHECKSUM_SIGNING_CERT ?= ./keys/checksumsign.private.pem
 
 
-### Simple build ##########################################
+### Simple debug build ####################################
 .PHONY: build
 build:
-		@./build.sh -i $(SRC) -o $(OUT) -v $(VERSION)
+		@./build.sh -i $(SRC) -o $(OUT) -v $(VERSION) -t debug
 
 
 ### Test suite ############################################

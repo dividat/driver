@@ -1,85 +1,164 @@
-// Mock the driver at localhost:8382 to replay Senso Flex package recordings
+#!/usr/bin/env node
+// Replay Senso Flex serial data recordings to a running Driver via mock device
 
-const argv = require('minimist')(process.argv.slice(2))
-const fs = require('fs')
-const split = require('binary-split')
-const websocket = require('ws')
-const http = require('http')
-const EventEmitter = require('events')
+const { program } = require("commander");
 
-var recFile = argv['_'].pop() || 'rec/flex/zero.dat'
-let speedFactor = 1/(parseFloat(argv['speed']) || 1)
-let driverVersion = argv['driver-version'] || "9.9.9-REPLAY"
-let loop = !argv['once']
+// Import VirtualDevice from test utilities
+const VirtualDevice = require("../../test/flex/mock/VirtualDevice");
 
-// Create a never ending stream of data
-function Replayer (recFile) {
-  var emitter = new EventEmitter()
+// USB descriptors for different device types
+// Note: Values are 4-char hex strings without 0x prefix (sysFS format)
+const DEVICE_USB_INFO = {
+  // V4 is Teensy 3.x with bcdDevice <= 0x0277
+  v4: {
+    idVendor: "16c0",
+    idProduct: "0483",
+    manufacturer: "Teensyduino",
+    product: "Teensy",
+    bcdDevice: "0277",
+  },
+  // V5 is Teensy 4.0 with bcdDevice > 0x0277
+  v5: {
+    idVendor: "16c0",
+    idProduct: "0483",
+    manufacturer: "Teensyduino",
+    product: "Teensy",
+    bcdDevice: "0278",
+  },
+  // V6 (Sensitronics)
+  v6: {
+    idVendor: "16c0",
+    idProduct: "0483",
+    manufacturer: "Dividat",
+    product: "FlexV6",
+  },
+};
 
-  function createStream () {
-    var stream = new fs.createReadStream(recFile).pipe(split())
+// Define CLI using commander
+program
+  .description("Replay Senso Flex serial data recordings to a running Driver via a mock device.\n\nNote: The Driver must be running with test mode enabled for mock device registration.")
+  .argument("[recording-file]", "path to the recording file", "rec/flex/zero.dat")
+  .option("-s, --speed <number>", "replay speed multiplier (>1 faster, <1 slower)", parseFloat, 1)
+  .option("--once", "play recording once and exit instead of looping")
+  .option("-u, --driver-url <url>", "URL of the running Driver", "http://127.0.0.1:8382")
+  .requiredOption("-d, --device <type>", "device type to emulate (v4, v5, v6)")
+  .option("--passthru", "Replay the recording verbatim. For use with recordings of /flex WS stream.")
+  .parse();
 
-    stream.on('data', (data) => {
-      stream.pause()
+const options = program.opts();
+const recFile = program.args[0] || "rec/flex/zero.dat";
+const speed = options.speed;
+const loop = !options.once;
+const driverUrl = options.driverUrl;
+const deviceType = options.device.toLowerCase();
 
-      var items = data.toString().split(',')
-      var msg
-      var timeout
-      if (items.length === 2) {
-        msg = items[1]
-        timeout = items[0]
-      } else {
-        msg = items[0]
-        timeout = 20
-      }
-      var buf = Buffer.from(msg, 'base64')
-      emitter.emit('data', buf)
-
-      setTimeout(() => {
-        stream.resume()
-      }, timeout * speedFactor)
-    }).on('end', () => {
-      if (loop) {
-        console.log('End of the record stream, looping.')
-        createStream()
-      } else {
-        console.log('End of the record stream, exiting.')
-        process.exit(0)
-      }
-    })
-  }
-  createStream()
-  return emitter
+// Validate device type
+const validDeviceTypes = Object.keys(DEVICE_USB_INFO);
+if (!validDeviceTypes.includes(deviceType)) {
+  console.error(`Error: Invalid device type '${deviceType}'`);
+  console.error(`Valid options: ${validDeviceTypes.join(", ")}`);
+  process.exit(1);
 }
 
-const driverMetadata = {
-    "message":   "Dividat Driver",
-    "version":   driverVersion,
-    "machineId": "b58f4aa6e34227c2d0517c924c9060bc8a25d8de677bb42d9dd3d9d2a7eb128d",
-    "os":        "linux",
-    "arch":      "amd64",
+// Get USB info and optionally apply passthru prefix
+const usbInfo = { ...DEVICE_USB_INFO[deviceType] };
+if (options.passthru) {
+  usbInfo.product = `PASSTHRU-${deviceType}`;
 }
 
-const server = http.createServer((req, res) => {
-  if (req.method === 'GET' && req.url === '/') {
-    res.writeHead(200,
-        {'Content-Type': 'application/json',
-         'Access-Control-Allow-Origin': '*'}
-    );
-    res.end(JSON.stringify(driverMetadata));
-  } else {
-    res.writeHead(404);
-    res.end();
+async function main() {
+  console.log(`Replay Flex Recording Tool`);
+  console.log(`--------------------------`);
+  console.log(`Recording file: ${recFile}`);
+  console.log(`Speed: ${speed}x`);
+  console.log(`Loop: ${loop}`);
+  console.log(`Driver URL: ${driverUrl}`);
+  console.log(`Device type: ${deviceType}`);
+  console.log();
+
+  // Check if recording file exists
+  const fs = require("fs");
+  if (!fs.existsSync(recFile)) {
+    console.error(`Error: Recording file not found: ${recFile}`);
+    process.exit(1);
   }
-});
 
-const wss = new websocket.Server({ server });
+  // Create virtual device with selected USB descriptors
+  const virtualDevice = new VirtualDevice(usbInfo);
 
-wss.on('connection', function connection(ws) {
-  const dataStream = Replayer(recFile)
-  dataStream.on('data', (data) => ws.send(data))
-});
+  // Initialize the virtual serial port
+  console.log("Initializing virtual device...");
+  try {
+    await virtualDevice.initialize();
+    console.log(`Virtual serial port created at: ${virtualDevice.address}`);
+  } catch (error) {
+    console.error(`Failed to initialize virtual device: ${error.message}`);
+    process.exit(1);
+  }
 
-server.listen(8382, () => {
-  console.log('Mock Driver running at http://localhost:8382/');
+  // Register mock device with the Driver
+  console.log(`Registering mock device with Driver at ${driverUrl}...`);
+  try {
+    await virtualDevice.registerWithDriver(driverUrl);
+    console.log(`Mock device registered with ID: ${virtualDevice.registeredId}`);
+  } catch (error) {
+    console.error(`Failed to register mock device with Driver: ${error.message}`);
+    console.error(`Make sure the Driver is running with test mode enabled.`);
+    virtualDevice.serialPort.close();
+    process.exit(1);
+  }
+
+  // Track if we're shutting down to suppress expected errors
+  let isShuttingDown = false;
+
+  // Handle errors from the serial port (e.g., socat exit on SIGINT)
+  virtualDevice.serialPort.on("error", (error) => {
+    if (!isShuttingDown) {
+      console.error(`Serial port error: ${error.message}`);
+    }
+  });
+
+  // Handle graceful shutdown
+  const cleanup = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    console.log("\nShutting down...");
+    virtualDevice.stopReplay();
+
+    // Close serial port first to prevent error events from socat
+    if (virtualDevice.serialPort) {
+      virtualDevice.serialPort.close();
+    }
+
+    try {
+      await virtualDevice.unregisterFromDriver(driverUrl);
+      console.log("Unregistered mock device from Driver.");
+    } catch (error) {
+      console.warn(`Warning: Failed to unregister device: ${error.message}`);
+    }
+
+    process.exit(0);
+  };
+
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
+
+  // Start replaying the recording
+  console.log(`\nStarting replay of ${recFile}...`);
+  try {
+    await virtualDevice.replayRecording(recFile, loop, speed);
+    if (!loop) {
+      console.log("End of recording reached, exiting.");
+      await cleanup();
+    }
+  } catch (error) {
+    console.error(`Replay error: ${error.message}`);
+    await cleanup();
+  }
+}
+
+main().catch((error) => {
+  console.error(`Unexpected error: ${error.message}`);
+  process.exit(1);
 });
