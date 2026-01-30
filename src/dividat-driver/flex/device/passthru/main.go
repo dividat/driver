@@ -19,7 +19,7 @@ import (
 type PassthruHandler struct{}
 
 func (PassthruHandler) Run(ctx context.Context, logger *logrus.Entry, port serial.Port, tx chan interface{}, onReceive func([]byte)) {
-	logger.Info("PassthruReader started")
+	logger.Info("PassthruHandler started")
 	readerCtx := context.WithoutCancel(ctx)
 
 	// Channel to receive ack that reader is done
