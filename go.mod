@@ -1,6 +1,8 @@
 module github.com/dividat/driver
 
-go 1.18
+go 1.23.0
+
+toolchain go1.23.3
 
 require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
@@ -25,8 +27,8 @@ require (
 require (
 	github.com/creack/goselect v0.1.2 // indirect
 	github.com/miekg/dns v1.1.43 // indirect
-	golang.org/x/net v0.0.0-20210423184538-5f58ad60dda6 // indirect
-	golang.org/x/sys v0.19.0 // indirect
+	golang.org/x/net v0.36.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
 )
 
 replace go.bug.st/serial => github.com/dividat/go-serial v1.6.4-usbmetadata
