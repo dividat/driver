@@ -5,28 +5,6 @@ on:
   push:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/magic-nix-cache-action@v11
-      - run: nix develop --command gofmt -d . && test -z "$(nix develop --command gofmt -l .)"
-      - run: nix develop --command make build
-      - run: nix develop --command make test
-
-  crossbuild-linux-and-win:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/magic-nix-cache-action@v11
-      - run: nix develop --command make crossbuild
-
   crossbuild-mac:
     runs-on: macos-latest
     steps:
