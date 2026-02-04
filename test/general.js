@@ -38,5 +38,6 @@ it('Opening a second instance of the driver fails.', (done) => {
 it('Get log entries from HTTP endpoint.', async () => {
   const logs = await getJSON('http://127.0.0.1:8382/log')
   expect(logs).to.be.an('array')
-  expect(logs[0]).to.include({level: 'info', msg: 'Dividat Driver starting'})
+  expect(logs[0].level).to.equal('info')
+  expect(logs[0].msg).to.match(/Dividat Driver (.*) starting/)
 })

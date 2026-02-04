@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
@@ -28,9 +29,7 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 	logServer := logging.NewLogServer()
 	logger.AddHook(logServer)
 
-	baseLog := logger.WithFields(logrus.Fields{
-		"version": version,
-	})
+	baseLog := logrus.NewEntry(logger)
 
 	// Get System information
 	systemInfo, err := GetSystemInfo()
@@ -38,7 +37,7 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 		baseLog.WithError(err).Panic("Could not get system information.")
 	}
 
-	baseLog.Info("Dividat Driver starting")
+	baseLog.Info(fmt.Sprintf("Dividat Driver (%s) starting", version))
 
 	// Setup log endpoint
 	http.Handle("/log", originMiddleware(origins, baseLog, logServer))
