@@ -63,7 +63,7 @@ if (!validDeviceTypes.includes(deviceType)) {
 // Get USB info and optionally apply passthru prefix
 const usbInfo = { ...DEVICE_USB_INFO[deviceType] };
 if (options.passthru) {
-  usbInfo.product = `PASSTHRU-${deviceType}`;
+  usbInfo.product = `PASSTHRU-${usbInfo.product}`;
 }
 
 async function main() {
