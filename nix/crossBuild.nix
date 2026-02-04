@@ -26,6 +26,10 @@ in
     let
       mingwPkgs = pkgs.pkgsCross.mingwW64;
       cc = mingwPkgs.stdenv.cc;
+
+      mcfgthreads = mingwPkgs.windows.mcfgthreads.overrideAttrs (oldAttrs: {
+        configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static" ];
+      });
     in
     mkCrossBuildShell {
       GOOS = "windows";
@@ -33,7 +37,7 @@ in
       CC = "${cc}/bin/x86_64-w64-mingw32-gcc";
       buildInputs = [
         cc
-        mingwPkgs.windows.mingw_w64_pthreads
+        mcfgthreads
       ];
       staticBuild = true;
     };
