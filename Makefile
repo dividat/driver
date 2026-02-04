@@ -20,7 +20,7 @@ OUT ?= bin/dividat-driver
 # Only channel is main now
 CHANNEL := main
 
-VERSION := $(shell git describe --always HEAD)
+VERSION ?= $(shell git describe --always HEAD)
 
 CHECKSUM_SIGNING_CERT ?= ./keys/checksumsign.private.pem
 
