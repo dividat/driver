@@ -36,7 +36,7 @@ const DEVICE_USB_INFO = {
 
 // Define CLI using commander
 program
-  .description("Replay Senso Flex serial data recordings to a running Driver via a mock device.\n\nNote: The Driver must be running with test mode enabled for mock device registration.")
+  .description("Replay Senso Flex serial data recordings to a running Driver via a mock device.\n\nNote: The Driver must be running and built with a 'debug' tag for mock device registration.")
   .argument("[recording-file]", "path to the recording file", "rec/flex/zero.dat")
   .option("-s, --speed <number>", "replay speed multiplier (>1 faster, <1 slower)", parseFloat, 1)
   .option("--once", "play recording once and exit instead of looping")
@@ -103,7 +103,7 @@ async function main() {
     console.log(`Mock device registered with ID: ${virtualDevice.registeredId}`);
   } catch (error) {
     console.error(`Failed to register mock device with Driver: ${error.message}`);
-    console.error(`Make sure the Driver is running with test mode enabled.`);
+    console.error(`Make sure the Driver is running and built with a 'debug' tag.`);
     virtualDevice.serialPort.close();
     process.exit(1);
   }
