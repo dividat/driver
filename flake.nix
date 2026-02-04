@@ -4,7 +4,7 @@
     and a development shell for Linux and macOS.
   '';
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/23.11";
+    nixpkgs.url = "github:nixos/nixpkgs/24.11";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
