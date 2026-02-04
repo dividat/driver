@@ -131,7 +131,7 @@ class VirtualSerialPort extends EventEmitter {
    */
   write(data) {
     if (!this.isOpen || !this.writeStream) {
-      cosnole.error(
+      console.error(
         "Write failed: TTY is not open (isOpen:",
         this.isOpen,
         "writeStream:",
