@@ -20,7 +20,7 @@ require (
 	// dependency choice as these projects evolve in the future.
 	github.com/libp2p/zeroconf/v2 v2.2.0
 	github.com/pin/tftp v2.1.0+incompatible
-	github.com/sirupsen/logrus v1.8.1
+	github.com/sirupsen/logrus v1.8.3
 	go.bug.st/serial v1.6.1
 )
 
