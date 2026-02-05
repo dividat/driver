@@ -5,7 +5,9 @@ package mockdev
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -80,11 +82,8 @@ func (h *MockDeviceRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MockDeviceRegistry) ListMockDevices() []*serialenum.PortDetails {
-	ports := make([]*serialenum.PortDetails, 0, len(h.registeredMockDevices))
-	for _, port := range h.registeredMockDevices {
-		ports = append(ports, port)
-	}
-	return ports
+	values := slices.Collect(maps.Values(h.registeredMockDevices))
+	return values
 }
 
 func (h *MockDeviceRegistry) nextMockDeviceId() MockDeviceId {

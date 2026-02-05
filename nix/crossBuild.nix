@@ -26,6 +26,10 @@ in
     let
       mingwPkgs = pkgs.pkgsCross.mingwW64;
       cc = mingwPkgs.stdenv.cc;
+
+      mcfgthreads = mingwPkgs.windows.mcfgthreads.overrideAttrs (oldAttrs: {
+        configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static" ];
+      });
     in
     mkCrossBuildShell {
       GOOS = "windows";
@@ -33,7 +37,7 @@ in
       CC = "${cc}/bin/x86_64-w64-mingw32-gcc";
       buildInputs = [
         cc
-        mingwPkgs.windows.mingw_w64_pthreads
+        mcfgthreads
       ];
       staticBuild = true;
     };
@@ -43,7 +47,7 @@ in
       muslPkgs = pkgs.pkgsCross.musl64;
       cc = muslPkgs.gcc;
       static-pcsclite = muslPkgs.pcsclite.overrideAttrs (attrs: {
-        configureFlags = attrs.configureFlags ++ [ "--enable-static" "--disable-shared" ];
+        mesonFlags = attrs.mesonFlags ++ [ (pkgs.lib.mesonOption "default_library" "static") ];
       });
     in
     mkCrossBuildShell {
