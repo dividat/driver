@@ -1,6 +1,6 @@
 /* eslint-env mocha */
 
-const { wait, getJSON, startDriver } = require('./utils')
+const { wait, getJSON, startDriver, waitForEndpoint } = require('./utils')
 const expect = require('chai').expect
 
 var driver
@@ -10,7 +10,7 @@ beforeEach(async () => {
   driver = startDriver().on('exit', (c) => {
     code = c
   })
-  await wait(500)
+  await waitForEndpoint('http://127.0.0.1:8382');
   expect(code).to.be.equal(0)
   driver.removeAllListeners()
 })
