@@ -1,9 +1,8 @@
-const { wait, startDriver, connectWS, expectEvent } = require("../utils");
+const { wait, startDriver, connectWS, expectEvent, waitForEndpoint } = require("../utils");
 const expect = require("chai").expect;
 const VirtualDevice = require("./mock/VirtualDevice");
 const path = require("path");
 const {
-  waitForEndpoint,
   generateFlexSerialFrame,
   generateRandomSensitronicsFrame,
   splitBufferRandomly,

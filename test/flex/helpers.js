@@ -1,20 +1,5 @@
 const { wait } = require("../utils");
 
-async function waitForEndpoint(url, maxAttempts = 5, delay = 100) {
-  let lastError = null;
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      // note: not connecting to websocket to avoid messing with test state by having a client
-      const res = await fetch(url);
-      return;
-    } catch (e) {
-      lastError = e;
-      await wait(delay);
-    }
-  }
-  throw new Error(`Endpoint ${url} not available after ${maxAttempts} attempts, last error: ${e}`);
-}
-
 /**
  * Generate a single synthetic Flex serial data frame.
  *
@@ -135,7 +120,6 @@ function splitBufferRandomly(buffer, minChunkSize = 1, maxChunkSize = 10) {
 }
 
 module.exports = {
-  waitForEndpoint,
   generateFlexSerialFrame,
   generateSensitronicsFrame,
   generateRandomSensitronicsFrame,

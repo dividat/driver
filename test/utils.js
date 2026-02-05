@@ -48,5 +48,21 @@ module.exports = {
         }
       })
     })
+  },
+
+  // Checks whether a connection can be established via HTTP to URL, regardless
+  // of status code.
+  waitForEndpoint: async function(url, maxAttempts = 10, delay = 100) {
+    let lastError = null
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const res = await fetch(url)
+        return
+      } catch (e) {
+        lastError = e
+        await module.exports.wait(delay)
+      }
+    }
+    throw new Error(`Endpoint ${url} not available after ${maxAttempts} attempts, last error: ${e}`)
   }
 }

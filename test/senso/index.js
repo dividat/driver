@@ -1,5 +1,5 @@
 /* eslint-env mocha */
-const { wait, startDriver, connectWS, expectEvent } = require('../utils')
+const { wait, startDriver, connectWS, expectEvent, waitForEndpoint } = require('../utils')
 const expect = require('chai').expect
 
 const mock = require('./mock')
@@ -16,8 +16,7 @@ describe('Basic functionality', () => {
     driver = startDriver().on('exit', (c) => {
       code = c
     })
-  // Give driver 500ms to start up
-    await wait(500)
+    await waitForEndpoint('http://127.0.0.1:8382/senso');
     expect(code).to.be.equal(0)
     driver.removeAllListeners()
 
