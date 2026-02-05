@@ -64,5 +64,14 @@ module.exports = {
       }
     }
     throw new Error(`Endpoint ${url} not available after ${maxAttempts} attempts, last error: ${e}`)
+  },
+
+  skipTestOnMacOSinCI: function (test) {
+    const isMac = process.platform === 'darwin'
+    const isGitHubActions = process.env.GITHUB_ACTIONS === 'true'
+
+    if (isMac && isGitHubActions) {
+        test.skip()
+    }
   }
 }

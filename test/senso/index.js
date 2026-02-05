@@ -1,5 +1,5 @@
 /* eslint-env mocha */
-const { wait, startDriver, connectWS, expectEvent, waitForEndpoint } = require('../utils')
+const { wait, startDriver, connectWS, expectEvent, waitForEndpoint, skipTestOnMacOSinCI } = require('../utils')
 const expect = require('chai').expect
 
 const mock = require('./mock')
@@ -212,6 +212,8 @@ describe('Basic functionality', () => {
   })
 
   it('Can discover mock Senso', async function () {
+    // bonjour / mDNS does not seem to work on Github's macOS runners
+    skipTestOnMacOSinCI(this)
     this.timeout(6000)
 
     // connect with Senso WS
