@@ -122,9 +122,9 @@ func (backend *DeviceBackend) Connect(address string) {
 		backend.broker.TryPub(data, brokerTopicRx)
 	}
 
-	go connectTCP(ctx, backend.log.WithField("channel", "data"), address+":55568", backend.broker.Sub("noTx"), onReceive)
+	go connectTCP(ctx, backend.log.WithField("channel", "data"), address+":55568", backend.broker.Sub("noTx"), onReceive, true)
 	time.Sleep(1000 * time.Millisecond)
-	go connectTCP(ctx, backend.log.WithField("channel", "control"), address+":55567", backend.broker.Sub(brokerTopicTx), onReceive)
+	go connectTCP(ctx, backend.log.WithField("channel", "control"), address+":55567", backend.broker.Sub(brokerTopicTx), onReceive, false)
 
 	backend.cancelCurrentConnection = cancel
 }

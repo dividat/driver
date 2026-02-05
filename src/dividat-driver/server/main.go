@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
@@ -28,9 +29,7 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 	logServer := logging.NewLogServer()
 	logger.AddHook(logServer)
 
-	baseLog := logger.WithFields(logrus.Fields{
-		"version": version,
-	})
+	baseLog := logrus.NewEntry(logger)
 
 	// Get System information
 	systemInfo, err := GetSystemInfo()
@@ -38,13 +37,7 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 		baseLog.WithError(err).Panic("Could not get system information.")
 	}
 
-	baseLog = baseLog.WithFields(logrus.Fields{
-		"machineId": systemInfo.MachineId,
-		"os":        systemInfo.Os,
-		"arch":      systemInfo.Arch,
-	})
-
-	baseLog.Info("Dividat Driver starting")
+	baseLog.Info(fmt.Sprintf("Dividat Driver (%s) starting", version))
 
 	// Setup log endpoint
 	http.Handle("/log", originMiddleware(origins, baseLog, logServer))
@@ -71,9 +64,6 @@ func Start(logger *logrus.Logger, origins []string) context.CancelFunc {
 
 	// Create a logger for server
 	log := baseLog.WithField("package", "server")
-
-	// Start the monitor
-	go startMonitor(baseLog.WithField("package", "monitor"))
 
 	// Setup HTTP Server
 	server := http.Server{Addr: "127.0.0.1:" + serverPort}
