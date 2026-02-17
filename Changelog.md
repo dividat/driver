@@ -2,7 +2,16 @@
 
 ## [UNRELEASED]
 
+### Added
+
+- Serial (Flex) device data recording, replay and tests
+- Driver command support for /flex clients
+- Flex V6 / Sensitronics device protocol support
+
+### Changed
+
 - Reduce log metadata and volume
+- Update nixpkgs, go and dependency versions
 
 ## [2.7.0] - 2025-10-15
 
