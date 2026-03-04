@@ -90,6 +90,11 @@ func (handle *DeviceEnumerator) ListMatchingDevices() []MatchedDevice {
 	for _, port := range ports {
 		handle.log.WithField("name", port.Name).WithField("vendor", port.VID).Debug("Considering serial port.")
 
+		if (port.VID == "") || (port.PID == "") || (port.BcdDevice == "") {
+			handle.log.WithField("name", port.Name).Debug("Skipping serial port due to missing USB descriptors (not a USB device?)")
+			continue
+		}
+
 		device, err := portDetailsToDeviceInfo(*port)
 		if err != nil {
 			handle.log.WithField("port", port).WithField("err", err).Error("Failed to convert serial port details to device info!")
