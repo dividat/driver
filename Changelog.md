@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+### Changed
+
+- Do not produce error logs when encountering non-USB serial devices
+
 ## [2.8.0] - 2026-02-17
 
 ### Added
