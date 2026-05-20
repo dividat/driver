@@ -7,8 +7,7 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+*"
 
 permissions:
-  contents: write
-
+  contents: read
 
 jobs:
   build-macos:
@@ -55,6 +54,8 @@ jobs:
   release:
     needs: [build-macos, build-others]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
