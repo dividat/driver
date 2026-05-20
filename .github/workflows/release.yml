@@ -23,7 +23,6 @@ jobs:
       - uses: cachix/install-nix-action@616559265b40713947b9c190a8ff4b507b5df49b # v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/magic-nix-cache-action@def9f5a5c6a6b8751c0534e8813a5d0ad2635660 # v11
       - run: nix develop --command make crossbuild_mac
       - run: nix develop --command make crossbuild_mac_bundles
       - name: 'Upload Artifacts'
@@ -45,7 +44,6 @@ jobs:
       - uses: cachix/install-nix-action@616559265b40713947b9c190a8ff4b507b5df49b # v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/magic-nix-cache-action@def9f5a5c6a6b8751c0534e8813a5d0ad2635660 # v11
       - run: nix develop --command make crossbuild
       - name: 'Upload Artifacts'
         id: upload
