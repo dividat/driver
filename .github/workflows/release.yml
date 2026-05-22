@@ -7,8 +7,7 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+*"
 
 permissions:
-  contents: write
-
+  contents: read
 
 jobs:
   build-macos:
@@ -17,13 +16,13 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
-      - run: git fetch --tags --force origin ${{ github.ref }}
-      - run: git checkout ${{ github.ref }}
+          persist-credentials: false
+      - run: git fetch --tags --force origin ${GITHUB_REF}
+      - run: git checkout ${GITHUB_REF}
       - run: git describe --always HEAD
       - uses: cachix/install-nix-action@616559265b40713947b9c190a8ff4b507b5df49b # v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/magic-nix-cache-action@def9f5a5c6a6b8751c0534e8813a5d0ad2635660 # v11
       - run: nix develop --command make crossbuild_mac
       - run: nix develop --command make crossbuild_mac_bundles
       - name: 'Upload Artifacts'
@@ -39,13 +38,13 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
-      - run: git fetch --tags --force origin ${{ github.ref }}
-      - run: git checkout ${{ github.ref }}
+          persist-credentials: false
+      - run: git fetch --tags --force origin ${GITHUB_REF}
+      - run: git checkout ${GITHUB_REF}
       - run: git describe --always HEAD
       - uses: cachix/install-nix-action@616559265b40713947b9c190a8ff4b507b5df49b # v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/magic-nix-cache-action@def9f5a5c6a6b8751c0534e8813a5d0ad2635660 # v11
       - run: nix develop --command make crossbuild
       - name: 'Upload Artifacts'
         id: upload
@@ -57,11 +56,14 @@ jobs:
   release:
     needs: [build-macos, build-others]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
