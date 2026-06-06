@@ -7,8 +7,9 @@ mkShell
     gcc
 
     # test dependencies
-    nodejs
-    pnpm
+    nodejs_24
+    # `install` causes warnings and is finally killed by OS on macOS CI runners with pnpm v11.4.0
+    pnpm_10
     socat
 
     # Required for building go dependencies
