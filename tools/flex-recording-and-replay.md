@@ -65,7 +65,7 @@ There are 3 ways to record Senso Flex data:
 
 ## Replaying Flex recordings
 
-The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as
+The Senso Flex replayer (`pnpm run replay-flex`) supports the same parameters as
 the Senso replayer and also allows to fake device metadata.
 
 Flex replay works by creating a mock serial device (using

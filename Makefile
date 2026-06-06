@@ -34,8 +34,8 @@ build:
 ### Test suite ############################################
 .PHONY: test
 test: build
-	npm install
-	npm test
+	pnpm install
+	pnpm test
 
 
 ### Formatting ############################################

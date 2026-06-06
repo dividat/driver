@@ -8,6 +8,7 @@ mkShell
 
     # test dependencies
     nodejs
+    pnpm
     socat
 
     # Required for building go dependencies
