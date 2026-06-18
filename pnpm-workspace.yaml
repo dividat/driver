@@ -2,5 +2,9 @@ minimumReleaseAge: 4320
 minimumReleaseAgeStrict: true
 
 trustPolicy: "no-downgrade"
+# Exclude specific dep version with known provenance blip
+# https://github.com/paulmillr/chokidar/issues/1440
+trustPolicyExclude:
+  - 'chokidar@4.0.3'
 
 blockExoticSubdeps: true
