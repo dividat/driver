@@ -9,7 +9,7 @@
     "replay-flex": "node tools/replay-flex/"
   },
   "dependencies": {
-    "bonjour": "^3.5.1",
+    "bonjour": "3.5.0",
     "chai": "^4.1.1",
     "mocha": "^11.7.6",
     "ws": "^8.20.1"
