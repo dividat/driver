@@ -7,7 +7,9 @@ mkShell
     gcc
 
     # test dependencies
-    nodejs
+    nodejs_24
+    # `install` causes warnings and is finally killed by OS on macOS CI runners with pnpm v11.4.0
+    pnpm_10
     socat
 
     # Required for building go dependencies
@@ -17,6 +19,5 @@ mkShell
     flex
     pkg-config
   ]
-  ++ lib.optional stdenv.isLinux pcsclite
-  ++ lib.optional stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.PCSC;
+  ++ lib.optional stdenv.isLinux pcsclite;
 }

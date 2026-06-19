@@ -157,13 +157,13 @@ For more details, see the [Flex recording and replay](tools/flex-recording-and-r
 
 Recorded data can be replayed for debugging purposes.
 
-For default settings: `npm run replay`
+For default settings: `pnpm run replay`
 
-To replay an other recording: `npm run replay -- rec/senso/simple.dat`
+To replay an other recording: `pnpm run replay -- rec/senso/simple.dat`
 
-To change the replay speed: `npm run replay -- --speed=0.5 rec/senso/simple.dat`
+To change the replay speed: `pnpm run replay -- --speed=0.5 rec/senso/simple.dat`
 
-To run without looping: `npm run replay -- --once`
+To run without looping: `pnpm run replay -- --once`
 
 #### Senso replay
 
@@ -171,7 +171,7 @@ The Senso replayer will appear as a Senso network device, so both driver and rep
 
 #### Senso Flex replay
 
-The Senso Flex replayer (`npm run replay-flex`) supports the same parameters as the Senso replayer and also allows to fake device metadata.
+The Senso Flex replayer (`pnpm run replay-flex`) supports the same parameters as the Senso replayer and also allows to fake device metadata.
 
 Driver must be running and built with the `debug` tag, which is the default if
 you run `make build` and/or `make run`.

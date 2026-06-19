@@ -48,6 +48,8 @@ in
       cc = muslPkgs.gcc;
       static-pcsclite = muslPkgs.pcsclite.overrideAttrs (attrs: {
         mesonFlags = attrs.mesonFlags ++ [ (pkgs.lib.mesonOption "default_library" "static") ];
+        # 'doc' output is skipped in musl builds, because doxygen tool is absent
+        outputs = builtins.filter (output_name: output_name != "doc") attrs.outputs;
       });
     in
     mkCrossBuildShell {
